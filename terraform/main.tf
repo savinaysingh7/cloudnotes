@@ -1,3 +1,8 @@
+resource "aws_key_pair" "deployer" {
+  key_name   = "cloudnotes-key"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDFqjE1F4SvTsQn7jlnLjH1Sug4a76UnQAXWaYMfu4nj0XBOoRrU53PAn/zQZBBhzsdfM14RQVc/U2oJmKJR7C+Siflj1J9xZBtcQMboTyc6s/bQLExwnRwHesBof8Hlz5jP82FKkExjV80nITFMTxTM9+SrXlnThzn6uOU5qixwoZQW036u45/52JSIHqqTRzY/5twZRYAgTRlcabs0eO2f5dI56/0u52XiQa4Y94O3qsP7q56PFoxmxXlyYwm4Mb+OStuVFZS65SC4iGHrSG1hmGeCtjtW4e71fH8Wf86lnYmL70ZjtipQBkRc8LQepwKZXeIrAurZ877XcQbcvMf savin@MEERA"
+}
+
 module "vpc" {
   source       = "./modules/vpc"
   project_name = var.project_name
@@ -9,18 +14,22 @@ module "jenkins_ec2" {
   subnet_id     = module.vpc.public_subnet_id
   sg_id         = module.vpc.jenkins_sg_id
   name          = "${var.project_name}-jenkins"
+  key_name      = aws_key_pair.deployer.key_name
   user_data     = <<-EOF
                 #!/bin/bash
+                exec > /tmp/jenkins-deploy.log 2>&1
+                export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y docker.io docker-compose openjdk-11-jre
+                apt-get install -y docker.io openjdk-11-jre curl
+                
                 curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
                 echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+                
                 apt-get update
                 apt-get install -y jenkins
                 systemctl start jenkins
                 systemctl enable jenkins
                 
-                # Add jenkins user to docker group
                 usermod -aG docker jenkins
                 systemctl restart jenkins
                 EOF
@@ -32,13 +41,21 @@ module "app_ec2" {
   subnet_id     = module.vpc.public_subnet_id
   sg_id         = module.vpc.app_sg_id
   name          = "${var.project_name}-app"
+  key_name      = aws_key_pair.deployer.key_name
   user_data     = <<-EOF
                 #!/bin/bash
+                exec > /tmp/deploy.log 2>&1
+                export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y docker.io docker-compose
+                apt-get install -y docker.io
                 systemctl start docker
                 systemctl enable docker
                 
+                # Install Docker Compose V2
+                mkdir -p /usr/local/lib/docker/cli-plugins/
+                curl -SL https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+                chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
                 mkdir -p /app
                 cat <<EOC > /app/docker-compose.yml
                 version: "3.8"
@@ -64,8 +81,7 @@ module "app_ec2" {
                 EOC
                 
                 cd /app
-                # Note: Pulling public images for the demo
-                docker-compose up -d
+                docker compose up -d
                 EOF
 }
 
