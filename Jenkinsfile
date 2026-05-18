@@ -18,8 +18,8 @@ pipeline {
         stage('Backend Tests') {
             steps {
                 script {
-                    // Run tests inside the python container so we don't need pip on the host
-                    sh "docker run --rm -v ${env.WORKSPACE}/app/backend:/app -w /app python:3.11-slim sh -c 'pip install -r requirements.txt && pytest'"
+                    // Using full path to docker to avoid PATH issues
+                    sh "/usr/bin/docker run --rm -v ${env.WORKSPACE}/app/backend:/app -w /app python:3.11-slim sh -c 'pip install -r requirements.txt && pytest'"
                 }
             }
         }
