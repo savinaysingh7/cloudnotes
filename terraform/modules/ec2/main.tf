@@ -3,6 +3,7 @@ resource "aws_instance" "this" {
   instance_type          = var.instance_type
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [var.sg_id]
+  user_data              = var.user_data
 
   tags = {
     Name = var.name
@@ -13,3 +14,6 @@ variable "instance_type" {}
 variable "subnet_id" {}
 variable "sg_id" {}
 variable "name" {}
+variable "user_data" {
+  default = null
+}

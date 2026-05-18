@@ -13,6 +13,11 @@ services:
       - "5432:5432"
     networks:
       - cloudnotes-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d cloudnotes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
@@ -22,7 +27,8 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - cloudnotes-network
 
@@ -33,6 +39,29 @@ services:
       - "80:80"
     depends_on:
       - backend
+    networks:
+      - cloudnotes-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9091:9090"
+    networks:
+      - cloudnotes-network
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
     networks:
       - cloudnotes-network
 

@@ -16,6 +16,7 @@ spec:
       containers:
         - name: backend
           image: cloudnotes-backend:latest # Placeholder tag
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
           env:
