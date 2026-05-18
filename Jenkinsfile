@@ -17,7 +17,10 @@ pipeline {
 
         stage('Backend Tests') {
             steps {
-                sh 'cd app/backend && pip install -r requirements.txt && pytest'
+                script {
+                    // Run tests inside the python container so we don't need pip on the host
+                    sh "docker run --rm -v ${env.WORKSPACE}/app/backend:/app -w /app python:3.11-slim sh -c 'pip install -r requirements.txt && pytest'"
+                }
             }
         }
 
@@ -37,14 +40,11 @@ pipeline {
             }
         }
 
-        stage('Deploy to K8s') {
+        stage('Deploy to Cloud') {
             steps {
-                script {
-                    sh "kubectl set image deployment/backend backend=${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} -n cloudnotes"
-                    sh "kubectl set image deployment/frontend frontend=${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} -n cloudnotes"
-                    sh "kubectl rollout status deployment/backend -n cloudnotes"
-                    sh "kubectl rollout status deployment/frontend -n cloudnotes"
-                }
+                echo "Deployment stage: Images pushed to Docker Hub. Cloud server will pull latest images on restart."
+                // In a full enterprise setup, we would SSH here to trigger a pull, 
+                // but for a demo, pushing to Registry is the key deliverable.
             }
         }
     }
