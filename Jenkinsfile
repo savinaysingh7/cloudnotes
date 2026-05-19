@@ -30,9 +30,8 @@ pipeline {
         stage('Backend Tests') {
             steps {
                 script {
-                    // Run tests INSIDE the image we just built. 
-                    // This is 100% reliable and doesn't need external files!
-                    sh "docker run --rm ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} pytest"
+                    // Set PYTHONPATH so pytest can find the 'app' module in the current directory
+                    sh "docker run --rm -e PYTHONPATH=/app ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} pytest"
                 }
             }
         }
