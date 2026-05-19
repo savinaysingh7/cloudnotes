@@ -6,7 +6,8 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
-        // Add /usr/bin to PATH so Jenkins finds docker automatically
+        APP_SERVER_IP   = '3.235.124.255'
+        SSH_KEY         = '/var/jenkins_home/cloudnotes_key'
         PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
 
@@ -20,7 +21,6 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    // Build images first
                     sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ./app/backend"
                     sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ./app/frontend"
                 }
@@ -30,8 +30,8 @@ pipeline {
         stage('Backend Tests') {
             steps {
                 script {
-                    // Set PYTHONPATH so pytest can find the 'app' module in the current directory
-                    sh "docker run --rm -e PYTHONPATH=/app ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} pytest"
+                    // Set PYTHONPATH and use a more standard testing call
+                    sh "docker run --rm -e PYTHONPATH=. ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} pytest"
                 }
             }
         }
@@ -39,7 +39,6 @@ pipeline {
         stage('Push to Docker Hub') {
             steps {
                 script {
-                    // Log in and push using the credentials you created in Jenkins
                     docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials') {
                         sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
                         sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
@@ -52,15 +51,29 @@ pipeline {
             }
         }
 
-        stage('Final Status') {
+        stage('Deploy to AWS Production') {
             steps {
-                echo "SUCCESS! Images pushed to Docker Hub."
-                echo "App URL: http://3.235.124.255"
+                script {
+                    // This is REAL Continuous Deployment. SSH into the production server and update it!
+                    sh """
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ubuntu@${APP_SERVER_IP} "
+                        sudo docker pull ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest
+                        sudo docker pull ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest
+                        sudo docker rm -f backend frontend || true
+                        sudo docker run -d --name backend --network cloudnotes-network -e DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest
+                        sudo docker run -d --name frontend --network cloudnotes-network -p 80:80 ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest
+                    "
+                    """
+                }
             }
         }
     }
 
     post {
+        success {
+            echo "--- PIPELINE SUCCESSFUL ---"
+            echo "Production App updated at http://${APP_SERVER_IP}"
+        }
         always {
             cleanWs()
         }
