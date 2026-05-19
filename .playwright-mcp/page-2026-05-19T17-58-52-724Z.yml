@@ -1,0 +1,15 @@
+- generic [ref=e2]:
+  - heading "CloudNotes" [level=1] [ref=e3]
+  - generic [ref=e4]:
+    - textbox "Title" [ref=e5]
+    - textbox "Note body..." [ref=e6]
+    - button "Add Note" [ref=e7] [cursor=pointer]
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - heading "First Note" [level=3] [ref=e10]
+      - paragraph [ref=e11]: This note was created by the automation script.
+      - button "Delete" [ref=e12] [cursor=pointer]
+    - generic [ref=e13]:
+      - heading "Fixed Note" [level=3] [ref=e14]
+      - paragraph [ref=e15]: Metrics are now working!
+      - button "Delete" [ref=e16] [cursor=pointer]
