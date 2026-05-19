@@ -6,6 +6,8 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
+        // Add /usr/bin to PATH so Jenkins finds docker automatically
+        PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
 
     stages {
@@ -15,36 +17,46 @@ pipeline {
             }
         }
 
-        stage('Backend Tests') {
+        stage('Build Docker Images') {
             steps {
                 script {
-                    // Using full path to docker to avoid PATH issues
-                    sh "/usr/bin/docker run --rm -v ${env.WORKSPACE}/app/backend:/app -w /app python:3.11-slim sh -c 'pip install -r requirements.txt && pytest'"
+                    // Build images first
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ./app/backend"
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ./app/frontend"
                 }
             }
         }
 
-        stage('Build & Push Docker Images') {
+        stage('Backend Tests') {
             steps {
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials') {
-                        def backendImage = docker.build("${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}", "./app/backend")
-                        backendImage.push()
-                        backendImage.push("latest")
+                    // Run tests INSIDE the image we just built. 
+                    // This is 100% reliable and doesn't need external files!
+                    sh "docker run --rm ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} pytest"
+                }
+            }
+        }
 
-                        def frontendImage = docker.build("${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG}", "./app/frontend")
-                        frontendImage.push()
-                        frontendImage.push("latest")
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    // Log in and push using the credentials you created in Jenkins
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials') {
+                        sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                        sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
                     }
                 }
             }
         }
 
-        stage('Deploy to Cloud') {
+        stage('Final Status') {
             steps {
-                echo "Deployment stage: Images pushed to Docker Hub. Cloud server will pull latest images on restart."
-                // In a full enterprise setup, we would SSH here to trigger a pull, 
-                // but for a demo, pushing to Registry is the key deliverable.
+                echo "SUCCESS! Images pushed to Docker Hub."
+                echo "App URL: http://3.235.124.255"
             }
         }
     }
