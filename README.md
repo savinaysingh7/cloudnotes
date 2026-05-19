@@ -4,7 +4,7 @@ CloudNotes is a containerized note-taking application designed to demonstrate th
 
 ## 🚀 Quick Links (Live Project)
 *   **Production App (AWS):** [http://44.220.170.36](http://44.220.170.36)
-*   **Jenkins CI/CD (AWS):** [http://3.236.196.189:8080](http://3.236.196.189:8080)
+*   **Jenkins CI/CD (AWS):** [http://3.234.255.197:8080](http://3.234.255.197:8080)
 *   **Monitoring (Local):** [http://localhost:3001](http://localhost:3001)
 
 ---
