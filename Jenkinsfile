@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    triggers {
+        // Automatically check GitHub for changes every minute
+        pollSCM('* * * * *')
+    }
+
     environment {
         DOCKER_HUB_USER = 'savinaysingh7'
         IMAGE_NAME_BE   = 'cloudnotes-backend'
