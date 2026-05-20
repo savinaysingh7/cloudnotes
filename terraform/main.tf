@@ -67,18 +67,30 @@ module "app_ec2" {
                       POSTGRES_DB: cloudnotes
                       POSTGRES_USER: admin
                       POSTGRES_PASSWORD: secret123
+                    networks:
+                      - cloudnotes-network
+                    restart: unless-stopped
                   backend:
                     image: savinaysingh7/cloudnotes-backend:latest
                     environment:
                       DATABASE_URL: postgresql://admin:secret123@db:5432/cloudnotes
                     depends_on:
                       - db
+                    networks:
+                      - cloudnotes-network
+                    restart: unless-stopped
                   frontend:
                     image: savinaysingh7/cloudnotes-frontend:latest
                     ports:
                       - "80:80"
                     depends_on:
                       - backend
+                    networks:
+                      - cloudnotes-network
+                    restart: unless-stopped
+                networks:
+                  cloudnotes-network:
+                    driver: bridge
                 EOC
                 
                 cd /app

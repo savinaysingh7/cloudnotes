@@ -3,16 +3,14 @@ version: "3.8"
 services:
   db:
     image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: cloudnotes
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secret123
+    env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - cloudnotes-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d cloudnotes"]
       interval: 5s
@@ -22,8 +20,7 @@ services:
   backend:
     build:
       context: ../app/backend
-    environment:
-      DATABASE_URL: postgresql://admin:secret123@db:5432/cloudnotes
+    env_file: .env
     ports:
       - "5000:5000"
     depends_on:
@@ -31,6 +28,7 @@ services:
         condition: service_healthy
     networks:
       - cloudnotes-network
+    restart: unless-stopped
 
   frontend:
     build:
@@ -41,15 +39,18 @@ services:
       - backend
     networks:
       - cloudnotes-network
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
     ports:
       - "9091:9090"
     networks:
       - cloudnotes-network
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
@@ -58,12 +59,12 @@ services:
       - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
     ports:
       - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+    env_file: .env
     depends_on:
       - prometheus
     networks:
       - cloudnotes-network
+    restart: unless-stopped
 
 networks:
   cloudnotes-network:

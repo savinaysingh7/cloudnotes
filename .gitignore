@@ -20,6 +20,11 @@ notes.db
 .DS_Store
 Thumbs.db
 
-# Secrets
+# Secrets — NEVER commit these
 *.pem
 *.key
+cloudnotes_key
+cloudnotes_key.pub
+temp_key.txt
+*_accessKeys.csv
+docker/.env

@@ -9,4 +9,5 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["python", "app.py"]
+# Use gunicorn for production; fall back to flask dev server via CMD override
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "app:app"]

@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request, Response
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from datetime import datetime, timezone
 import os
 
 app = Flask(__name__)
@@ -10,6 +12,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+CORS(app)  # Enable CORS for all routes
 metrics = PrometheusMetrics(app, path=None) # Disable automatic path
 
 # Custom metrics
@@ -21,14 +24,31 @@ notes_deleted_counter = Counter(
     'notes_deleted_total',
     'Total number of notes deleted'
 )
+notes_updated_counter = Counter(
+    'notes_updated_total',
+    'Total number of notes updated'
+)
 
 class Note(db.Model):
-    id    = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100), nullable=False)
-    body  = db.Column(db.Text, nullable=False)
+    id         = db.Column(db.Integer, primary_key=True)
+    title      = db.Column(db.String(100), nullable=False)
+    body       = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 with app.app_context():
     db.create_all()
+    # Auto-migrate: add created_at column if it doesn't exist on an older DB
+    try:
+        from sqlalchemy import text, inspect
+        inspector = inspect(db.engine)
+        columns = [c['name'] for c in inspector.get_columns('note')]
+        if 'created_at' not in columns:
+            db.session.execute(text(
+                'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT NOW()'
+            ))
+            db.session.commit()
+    except Exception:
+        pass  # Table may not exist yet (first run) — db.create_all() handles it
 
 @app.route('/metrics')
 def metrics_endpoint():
@@ -40,9 +60,19 @@ def health():
 
 @app.route('/api/notes', methods=['GET'])
 def get_notes():
-    notes = Note.query.all()
-    return jsonify([{"id": n.id, "title": n.title, "body": n.body}
-                    for n in notes])
+    search = request.args.get('search', '').strip()
+    if search:
+        notes = Note.query.filter(
+            Note.title.ilike(f'%{search}%') | Note.body.ilike(f'%{search}%')
+        ).all()
+    else:
+        notes = Note.query.all()
+    return jsonify([{
+        "id": n.id,
+        "title": n.title,
+        "body": n.body,
+        "created_at": n.created_at.isoformat() + 'Z' if n.created_at else None
+    } for n in notes])
 
 @app.route('/api/notes', methods=['POST'])
 def create_note():
@@ -54,6 +84,18 @@ def create_note():
     db.session.commit()
     notes_created_counter.inc()
     return jsonify({"id": note.id, "message": "Note created"}), 201
+
+@app.route('/api/notes/<int:note_id>', methods=['PUT'])
+def update_note(note_id):
+    note = Note.query.get_or_404(note_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    note.title = data.get('title', note.title)
+    note.body = data.get('body', note.body)
+    db.session.commit()
+    notes_updated_counter.inc()
+    return jsonify({"id": note.id, "message": "Note updated"})
 
 @app.route('/api/notes/<int:note_id>', methods=['DELETE'])
 def delete_note(note_id):
