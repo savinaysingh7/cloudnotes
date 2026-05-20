@@ -56,7 +56,6 @@ services:
     image: grafana/grafana:latest
     volumes:
       - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
     ports:
       - "3001:3000"
     env_file: .env

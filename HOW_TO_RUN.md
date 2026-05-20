@@ -8,10 +8,9 @@ This project is a full-scale DevOps showcase. You can run it in three different 
 Use this for quick development and local testing.
 
 1.  **Open Docker Desktop** on your computer and make sure it is running.
-2.  Open a terminal (PowerShell) and run:
+2.  Open a terminal (PowerShell) at the root of the project and run:
     ```powershell
-    cd docker
-    docker-compose up --build -d
+    docker-compose -f docker/docker-compose.yml up --build -d
     ```
 3.  **Access the app:** [http://localhost:80](http://localhost:80)
 4.  **Access Monitoring:**
@@ -108,8 +107,7 @@ See `terraform/backend.tf.example` for S3 remote state configuration.
 ---
 
 ## 🛑 How to Delete Everything (To save costs)
-Once your demo is finished, run this to avoid AWS charges:
+Once your demo is finished, run this from the project root to avoid AWS charges:
 ```powershell
-cd terraform
-terraform destroy -auto-approve
+terraform -chdir=terraform destroy -auto-approve
 ```
