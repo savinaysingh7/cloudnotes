@@ -105,7 +105,13 @@ pipeline {
             echo "Production App updated at http://${APP_SERVER_IP}"
         }
         always {
-            cleanWs()
+            script {
+                try {
+                    cleanWs()
+                } catch (err) {
+                    echo "Workspace cleanup skipped: ${err.message}"
+                }
+            }
         }
     }
 }
