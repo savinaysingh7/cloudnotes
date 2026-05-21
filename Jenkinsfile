@@ -2,8 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        // Automatically check GitHub for changes every minute
-        pollSCM('* * * * *')
+        githubPush()
     }
 
     environment {
@@ -11,7 +10,7 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
-        APP_SERVER_IP   = '3.235.124.255'
+        APP_SERVER_IP   = '43.205.110.18'
         SSH_KEY         = '/var/jenkins_home/cloudnotes_key'
         PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
@@ -88,15 +87,11 @@ pipeline {
         stage('Deploy to AWS Production') {
             steps {
                 script {
-                    // This is REAL Continuous Deployment. SSH into the production server and update it!
                     sh """
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ubuntu@${APP_SERVER_IP} "
-                        sudo docker pull ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest
-                        sudo docker pull ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest
-                        sudo docker network create cloudnotes-network 2>/dev/null || true
-                        sudo docker rm -f backend frontend || true
-                        sudo docker run -d --name backend --network cloudnotes-network -e DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest
-                        sudo docker run -d --name frontend --network cloudnotes-network -p 80:80 ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest
+                        cd /app
+                        sudo docker compose pull
+                        sudo docker compose up -d --remove-orphans
                     "
                     """
                 }
