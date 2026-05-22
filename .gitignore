@@ -29,3 +29,4 @@ temp_key.txt
 *_accessKeys.csv
 docker/.env
 start_automated.ps1
+update_hook.ps1
