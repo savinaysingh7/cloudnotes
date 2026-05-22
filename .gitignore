@@ -28,3 +28,4 @@ cloudnotes_key.pub
 temp_key.txt
 *_accessKeys.csv
 docker/.env
+start_automated.ps1
