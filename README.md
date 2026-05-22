@@ -3,8 +3,8 @@
 CloudNotes is a containerized note-taking application designed to demonstrate the complete DevOps lifecycle, covering all 5 units of the syllabus.
 
 ## 🚀 Quick Links (Live Project)
-*   **Production App (AWS):** [http://44.220.170.36](http://44.220.170.36)
-*   **Jenkins CI/CD (AWS):** [http://3.234.255.197:8080](http://3.234.255.197:8080)
+*   **Production App (AWS):** [http://13.206.199.155](http://13.206.199.155)
+*   **Jenkins CI/CD (AWS):** [http://13.201.29.106:8080](http://13.201.29.106:8080)
 *   **Monitoring (Local):** [http://localhost:3001](http://localhost:3001)
 
 ---

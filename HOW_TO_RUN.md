@@ -46,8 +46,8 @@ Use this to demonstrate orchestration and self-healing.
 ## ☁️ 3. Running in AWS Cloud (Production)
 This is your real, live internet deployment.
 
-*   **Production App:** [http://3.235.124.255](http://3.235.124.255)
-*   **Jenkins CI/CD:** [http://3.234.255.197:8080](http://3.234.255.197:8080)
+*   **Production App:** [http://13.206.199.155](http://13.206.199.155)
+*   **Jenkins CI/CD:** [http://13.201.50.42:8080](http://13.201.50.42:8080)
     *   **User:** `admin`
     *   **Password:** `8767317fd394488ba28b0f28445c1d44`
 
@@ -88,7 +88,7 @@ This is your real, live internet deployment.
 ### HTTPS / TLS Certificate
 To add SSL to the AWS production server:
 ```bash
-ssh -i cloudnotes_key ubuntu@3.235.124.255
+ssh -i cloudnotes_key ubuntu@YOUR_NEW_APP_IP
 sudo apt install -y certbot
 sudo certbot certonly --standalone -d your-domain.com
 # Then configure Nginx to use the cert
@@ -96,7 +96,7 @@ sudo certbot certonly --standalone -d your-domain.com
 
 ### GitHub Webhooks (Instead of Polling)
 1. Go to your GitHub repo → Settings → Webhooks
-2. Add webhook URL: `http://3.234.255.197:8080/github-webhook/`
+2. Add webhook URL: `http://YOUR_NEW_JENKINS_IP:8080/github-webhook/`
 3. Content type: `application/json`
 4. Events: Just the `push` event
 5. Remove `pollSCM` from Jenkinsfile and add `githubPush()` trigger

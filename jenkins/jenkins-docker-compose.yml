@@ -1,7 +1,10 @@
 version: "3.8"
 services:
   jenkins:
-    image: jenkins/jenkins:lts
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: jenkins-local
     privileged: true
     user: root
     ports:
@@ -9,7 +12,7 @@ services:
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
+      - ./init.groovy.d:/var/jenkins_home/init.groovy.d
       - /var/run/docker.sock:/var/run/docker.sock
-      - /usr/bin/docker:/usr/bin/docker
 volumes:
   jenkins_home:

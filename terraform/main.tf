@@ -1,6 +1,6 @@
 resource "aws_key_pair" "deployer" {
-  key_name   = "cloudnotes-key"
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDFqjE1F4SvTsQn7jlnLjH1Sug4a76UnQAXWaYMfu4nj0XBOoRrU53PAn/zQZBBhzsdfM14RQVc/U2oJmKJR7C+Siflj1J9xZBtcQMboTyc6s/bQLExwnRwHesBof8Hlz5jP82FKkExjV80nITFMTxTM9+SrXlnThzn6uOU5qixwoZQW036u45/52JSIHqqTRzY/5twZRYAgTRlcabs0eO2f5dI56/0u52XiQa4Y94O3qsP7q56PFoxmxXlyYwm4Mb+OStuVFZS65SC4iGHrSG1hmGeCtjtW4e71fH8Wf86lnYmL70ZjtipQBkRc8LQepwKZXeIrAurZ877XcQbcvMf savin@MEERA"
+  key_name   = "cloudnotes-key-new"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDV1/ufOIYnrKHxed+hr8G+e28tG8Yyy1cYfONMBbfFY/P8319rbwMFTcbOo1/eKM0JOuPcNMUHTkhy3/d/ZYqowilE7x/Qr3+E3djIRqQGrlRkaqLSZVtxd8ZY/2qq0QexezTq2ylfw1LUXWSbg+6GKS8F3stAEJz5O/7MmVk/EFnvJHtJOUdXcWZDK/dVEcRS+C6aSY/d3lNxebHDwO63VSgycM8aBsxkvPT8wiMHbtJXMfvMZspTiox6GdSSAHX5ld2fD1HZOldlhM6NM4hCqMVr9EFKfxg4v4AmV6HYN+aGrIeOVILo86htLH9R2sAwymDIDNVIawo3TWWyNVb3 savin@MEERA"
 }
 
 module "vpc" {
@@ -20,19 +20,21 @@ module "jenkins_ec2" {
                 exec > /tmp/jenkins-deploy.log 2>&1
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y docker.io openjdk-17-jre curl
-                
-                # Install Jenkins
-                curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
-                echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
-                apt-get update
-                apt-get install -y jenkins
-                
-                # Setup permissions
-                usermod -aG docker jenkins
-                systemctl start jenkins
-                systemctl enable jenkins
-                systemctl restart jenkins
+                apt-get install -y docker.io curl
+                systemctl start docker
+                systemctl enable docker
+
+                docker volume create jenkins_home
+                docker run -d \
+                  --name jenkins \
+                  --restart=unless-stopped \
+                  --user root \
+                  -p 8080:8080 \
+                  -p 50000:50000 \
+                  -v jenkins_home:/var/jenkins_home \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v /usr/bin/docker:/usr/bin/docker \
+                  jenkins/jenkins:lts-jdk21
                 EOF
 }
 
@@ -48,53 +50,22 @@ module "app_ec2" {
                 exec > /tmp/deploy.log 2>&1
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y docker.io
+                apt-get install -y docker.io curl docker-compose-v2 git
                 systemctl start docker
                 systemctl enable docker
-                
-                # Install Docker Compose V2
-                mkdir -p /usr/local/lib/docker/cli-plugins/
-                curl -SL https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
-                chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-                mkdir -p /app
-                cat <<EOC > /app/docker-compose.yml
-                version: "3.8"
-                services:
-                  db:
-                    image: postgres:15-alpine
-                    environment:
-                      POSTGRES_DB: cloudnotes
-                      POSTGRES_USER: admin
-                      POSTGRES_PASSWORD: secret123
-                    networks:
-                      - cloudnotes-network
-                    restart: unless-stopped
-                  backend:
-                    image: savinaysingh7/cloudnotes-backend:latest
-                    environment:
-                      DATABASE_URL: postgresql://admin:secret123@db:5432/cloudnotes
-                    depends_on:
-                      - db
-                    networks:
-                      - cloudnotes-network
-                    restart: unless-stopped
-                  frontend:
-                    image: savinaysingh7/cloudnotes-frontend:latest
-                    ports:
-                      - "80:80"
-                    depends_on:
-                      - backend
-                    networks:
-                      - cloudnotes-network
-                    restart: unless-stopped
-                networks:
-                  cloudnotes-network:
-                    driver: bridge
+                rm -rf /opt/cloudnotes
+                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /opt/cloudnotes
+
+                cat <<EOC > /opt/cloudnotes/docker/.env
+                POSTGRES_DB=cloudnotes
+                POSTGRES_USER=admin
+                POSTGRES_PASSWORD=secret123
+                DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes
                 EOC
-                
-                cd /app
-                docker compose up -d
+
+                cd /opt/cloudnotes
+                docker compose -f docker/docker-compose.yml up -d --build
                 EOF
 }
 

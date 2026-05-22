@@ -10,8 +10,7 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
-        APP_SERVER_IP   = '43.205.110.18'
-        SSH_KEY         = '/var/jenkins_home/cloudnotes_key'
+        APP_SERVER_IP   = '13.201.58.15'
         PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
 
@@ -87,13 +86,15 @@ pipeline {
         stage('Deploy to AWS Production') {
             steps {
                 script {
-                    sh """
-                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ubuntu@${APP_SERVER_IP} "
-                        cd /app
-                        sudo docker compose pull
-                        sudo docker compose up -d --remove-orphans
-                    "
-                    """
+                    withCredentials([sshUserPrivateKey(credentialsId: 'app-server-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
+                        sh """
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "
+                            cd /app
+                            sudo docker compose pull
+                            sudo docker compose up -d --remove-orphans
+                        "
+                        """
+                    }
                 }
             }
         }
