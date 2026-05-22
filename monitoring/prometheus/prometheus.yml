@@ -5,10 +5,6 @@ rule_files:
   - "alert_rules.yml"
 
 scrape_configs:
-  - job_name: 'cloudnotes-local-backend'
+  - job_name: 'cloudnotes-backend'
     static_configs:
       - targets: ['backend:5000']
-  
-  - job_name: 'cloudnotes-aws-backend'
-    static_configs:
-      - targets: ['3.235.124.255:80']

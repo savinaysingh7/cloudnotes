@@ -2,6 +2,6 @@
 echo =========================================
 echo       Stopping Mumbai CloudNotes...
 echo =========================================
-aws ec2 stop-instances --instance-ids i-08285044b5b11059d i-07b537e68054e6b72 --region ap-south-1
+aws ec2 stop-instances --instance-ids i-08480b4d5806d8ce2 i-08fe19a718092a36f --region ap-south-1
 echo Costs paused.
 pause
