@@ -88,6 +88,8 @@ pipeline {
                 script {
                     withCredentials([sshUserPrivateKey(credentialsId: 'app-server-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
                         sh """
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "sudo mkdir -p /app && sudo chown ubuntu:ubuntu /app"
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.yml docker/.env ubuntu@\${APP_SERVER_IP}:/app/
                         ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "
                             cd /app
                             sudo docker compose pull
