@@ -1,0 +1,69 @@
+services:
+  db:
+    image: postgres:15-alpine
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d cloudnotes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: savinaysingh7/cloudnotes-backend:latest
+    env_file: .env
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  frontend:
+    image: savinaysingh7/cloudnotes-frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+    ports:
+      - "9091:9090"
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
+    env_file: .env
+    depends_on:
+      - prometheus
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+networks:
+  cloudnotes-network:
+    driver: bridge
+
+volumes:
+  pgdata:

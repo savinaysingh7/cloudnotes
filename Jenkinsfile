@@ -95,7 +95,9 @@ pipeline {
                         echo "GF_SECURITY_ADMIN_PASSWORD=admin" >> docker/.env
 
                         ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "sudo mkdir -p /app && sudo chown ubuntu:ubuntu /app"
-                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.yml docker/.env ubuntu@\${APP_SERVER_IP}:/app/
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.prod.yml ubuntu@\${APP_SERVER_IP}:/app/docker-compose.yml
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/.env ubuntu@\${APP_SERVER_IP}:/app/
+                        scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no monitoring ubuntu@\${APP_SERVER_IP}:/app/
                         ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "
                             cd /app
                             sudo docker compose pull

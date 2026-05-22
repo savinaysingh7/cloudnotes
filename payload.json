@@ -1,0 +1,10 @@
+{
+  "name": "web",
+  "active": true,
+  "events": ["push"],
+  "config": {
+    "url": "http://13.207.40.247:8080/github-webhook/",
+    "content_type": "json",
+    "insecure_ssl": "0"
+  }
+}
