@@ -1,150 +1,136 @@
 {
-  "title": "CloudNotes Production Dashboard", 
-  "refresh": "5s", 
-  "version": 1, 
+  "title": "CloudNotes Production Dashboard",
+  "refresh": "5s",
+  "version": 2,
   "time": {
-    "to": "now", 
+    "to": "now",
     "from": "now-1h"
-  }, 
-  "timezone": "browser", 
-  "schemaVersion": 36, 
+  },
+  "timezone": "browser",
+  "schemaVersion": 36,
   "panels": [
     {
-      "gridPos": {
-        "y": 0, 
-        "h": 4, 
-        "w": 4, 
-        "x": 0
-      }, 
+      "title": "Backend Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          }, 
+          "color": { "mode": "thresholds" },
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              {
-                "color": "red", 
-                "value": null
-              }, 
-              {
-                "color": "green", 
-                "value": 1
-              }
-            ], 
-            "mode": "absolute"
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
           }
         }
-      }, 
-      "type": "stat", 
+      },
       "targets": [
-        {
-          "expr": "up{job=\"backend\"}", 
-          "refId": "A"
-        }
-      ], 
-      "title": "Backend Status"
-    }, 
+        { "expr": "up{job=\"cloudnotes-backend\"}", "refId": "A" }
+      ]
+    },
     {
-      "gridPos": {
-        "y": 0, 
-        "h": 4, 
-        "w": 4, 
-        "x": 4
-      }, 
-      "type": "stat", 
+      "title": "Total Notes Created",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
       "targets": [
-        {
-          "expr": "sum(notes_created_total)", 
-          "refId": "A"
-        }
-      ], 
-      "title": "Total Notes Created"
-    }, 
+        { "expr": "sum(notes_created_total)", "refId": "A" }
+      ]
+    },
     {
-      "gridPos": {
-        "y": 0, 
-        "h": 4, 
-        "w": 4, 
-        "x": 8
-      }, 
-      "type": "stat", 
+      "title": "Total Notes Deleted",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
       "targets": [
-        {
-          "expr": "sum(notes_deleted_total)", 
-          "refId": "A"
-        }
-      ], 
-      "title": "Total Notes Deleted"
-    }, 
+        { "expr": "sum(notes_deleted_total)", "refId": "A" }
+      ]
+    },
     {
-      "gridPos": {
-        "y": 0, 
-        "h": 4, 
-        "w": 4, 
-        "x": 12
-      }, 
-      "type": "stat", 
+      "title": "Total Notes Updated",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
       "targets": [
-        {
-          "expr": "sum(notes_updated_total)", 
-          "refId": "A"
-        }
-      ], 
-      "title": "Total Notes Updated"
-    }, 
+        { "expr": "sum(notes_updated_total)", "refId": "A" }
+      ]
+    },
     {
-      "gridPos": {
-        "y": 4, 
-        "h": 8, 
-        "w": 12, 
-        "x": 0
-      }, 
+      "title": "Error Rate (%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 4, "x": 20, "y": 0 },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "lineWidth": 2, 
-            "drawStyle": "line", 
-            "fillOpacity": 10
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
           }
         }
-      }, 
-      "type": "timeseries", 
+      },
       "targets": [
         {
-          "expr": "rate(flask_http_request_total[5m])", 
-          "refId": "A", 
-          "legendFormat": "{{method}} {{status}}"
+          "expr": "(sum(rate(flask_http_request_total{status=~\"5..\"}[5m])) or vector(0)) / (sum(rate(flask_http_request_total[5m])) or vector(1)) * 100",
+          "refId": "A"
         }
-      ], 
-      "title": "HTTP Request Rate (5m)"
-    }, 
+      ]
+    },
     {
-      "gridPos": {
-        "y": 4, 
-        "h": 8, 
-        "w": 12, 
-        "x": 12
-      }, 
+      "title": "HTTP Request Rate (5m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 4 },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes", 
-          "custom": {
-            "lineWidth": 2, 
-            "drawStyle": "line", 
-            "fillOpacity": 10
-          }
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
         }
-      }, 
-      "type": "timeseries", 
+      },
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=\"backend\"}", 
-          "refId": "A", 
-          "legendFormat": "Memory (bytes)"
+          "expr": "rate(flask_http_request_total[5m])",
+          "legendFormat": "{{method}} {{status}}",
+          "refId": "A"
         }
-      ], 
-      "title": "Backend Memory Usage"
+      ]
+    },
+    {
+      "title": "P95 Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 10, "x": 10, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95 Latency",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Backend Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 20, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=\"cloudnotes-backend\"}",
+          "legendFormat": "Memory (bytes)",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }
