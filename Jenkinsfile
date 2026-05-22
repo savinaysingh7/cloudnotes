@@ -99,6 +99,10 @@ pipeline {
                         scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/.env ubuntu@\${APP_SERVER_IP}:/app/
                         scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no monitoring ubuntu@\${APP_SERVER_IP}:/app/
                         ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "
+                            if [ -d /opt/cloudnotes ]; then
+                                cd /opt/cloudnotes
+                                sudo docker compose -f docker/docker-compose.yml down || true
+                            fi
                             cd /app
                             sudo docker compose pull
                             sudo docker compose up -d --remove-orphans
