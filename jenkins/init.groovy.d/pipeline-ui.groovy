@@ -24,7 +24,7 @@ try {
     def configClass = loader.loadClass('io.jenkins.plugins.pipelinegraphview.PipelineGraphViewConfiguration')
     def graphConfig = configClass.getMethod('get').invoke(null)
 
-    applyBooleanSetting(graphConfig, 'setShowGraphOnJobPage', false)
+    applyBooleanSetting(graphConfig, 'setShowGraphOnJobPage', true)
     applyBooleanSetting(graphConfig, 'setShowStageNames', true)
     applyBooleanSetting(graphConfig, 'setShowStageDurations', true)
     applyBooleanSetting(graphConfig, 'setShowGraphOnBuildPage', true)
