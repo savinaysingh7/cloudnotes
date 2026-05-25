@@ -128,7 +128,7 @@ pipeline {
                             cd /app
                             sudo docker compose pull
                             sudo docker compose up -d --remove-orphans
-                            sudo docker compose restart prometheus grafana
+                            sudo docker compose up -d --force-recreate prometheus grafana
 
                             for attempt in \$(seq 1 30); do
                                 if curl -fsS http://localhost/ >/dev/null && curl -fsS http://localhost:5000/api/health >/dev/null; then
