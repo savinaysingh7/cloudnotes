@@ -120,7 +120,7 @@ pipeline {
                         scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.prod.yml ubuntu@\${APP_SERVER_IP}:/app/docker-compose.yml
                         scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/.env ubuntu@\${APP_SERVER_IP}:/app/
                         scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no monitoring ubuntu@\${APP_SERVER_IP}:/app/
-                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} 'bash -s' <<'REMOTE_DEPLOY'
                             if [ -d /opt/cloudnotes ]; then
                                 cd /opt/cloudnotes
                                 sudo docker compose -f docker/docker-compose.yml down || true
@@ -130,7 +130,7 @@ pipeline {
                             sudo docker compose up -d --remove-orphans
                             sudo docker compose restart prometheus grafana
 
-                            for attempt in \$(seq 1 30); do
+                            for attempt in $(seq 1 30); do
                                 if curl -fsS http://localhost/ >/dev/null && curl -fsS http://localhost:5000/api/health >/dev/null; then
                                     exit 0
                                 fi
@@ -140,7 +140,7 @@ pipeline {
                             echo "Deployment health check failed"
                             sudo docker compose ps
                             exit 1
-                        "
+REMOTE_DEPLOY
                         """
                     }
                 }
