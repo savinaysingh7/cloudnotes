@@ -2,6 +2,8 @@ import jenkins.model.Jenkins
 
 System.setProperty('org.jenkinsci.pipeline.stageview.disabledOnMainJobPage', 'true')
 
+def jenkins = Jenkins.get()
+
 def applyBooleanSetting = { Object target, String setterName, boolean value ->
     def method = target.class.methods.find {
         it.name == setterName &&
@@ -20,7 +22,7 @@ def applyBooleanSetting = { Object target, String setterName, boolean value ->
 }
 
 try {
-    def loader = Jenkins.get().pluginManager.uberClassLoader
+    def loader = jenkins.pluginManager.uberClassLoader
     def configClass = loader.loadClass('io.jenkins.plugins.pipelinegraphview.PipelineGraphViewConfiguration')
     def graphConfig = configClass.getMethod('get').invoke(null)
 
@@ -30,10 +32,21 @@ try {
     applyBooleanSetting(graphConfig, 'setShowGraphOnBuildPage', true)
 
     graphConfig.save()
-    Jenkins.get().save()
+    jenkins.save()
     println '[cloudnotes-pipeline-ui] Pipeline visualization defaults configured.'
 } catch (ClassNotFoundException ignored) {
     println '[cloudnotes-pipeline-ui] Pipeline Graph View plugin is not installed; skipped.'
 } catch (Throwable t) {
     println "[cloudnotes-pipeline-ui] Pipeline visualization defaults failed: ${t.class.simpleName}: ${t.message}"
+}
+
+try {
+    def cloudNotesView = jenkins.getView('CloudNotes')
+    if (cloudNotesView != null && jenkins.primaryView?.viewName != 'CloudNotes') {
+        jenkins.setPrimaryView(cloudNotesView)
+        jenkins.save()
+        println '[cloudnotes-pipeline-ui] CloudNotes set as the default Jenkins view.'
+    }
+} catch (Throwable t) {
+    println "[cloudnotes-pipeline-ui] Default view configuration failed: ${t.class.simpleName}: ${t.message}"
 }

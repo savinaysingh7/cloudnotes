@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "CloudNotes Automated CI/CD Pipeline"
+  systemMessage: "CloudNotes Disposable DevOps: Code -> Test -> Scan -> Build -> Push -> Deploy"
   securityRealm:
     local:
       allowsSignup: false
@@ -8,9 +8,15 @@ jenkins:
           password: "admin"
   authorizationStrategy:
     globalMatrix:
-      permissions:
-        - "Overall/Administer:admin"
-        - "Overall/Read:authenticated"
+      entries:
+        - user:
+            name: "admin"
+            permissions:
+              - "Overall/Administer"
+        - group:
+            name: "authenticated"
+            permissions:
+              - "Overall/Read"
 
 unclassified:
   location:
@@ -19,6 +25,7 @@ unclassified:
 jobs:
   - script: >
       pipelineJob('CloudNotes-Pipeline') {
+        description('Automated CloudNotes delivery pipeline: Code -> Test -> Scan -> Build -> Push -> Deploy.')
         definition {
           cpsScm {
             scm {
@@ -30,5 +37,21 @@ jobs:
               }
             }
           }
+        }
+      }
+
+      listView('CloudNotes') {
+        description('Focused dashboard for the disposable CloudNotes CI/CD demo.')
+        jobs {
+          name('CloudNotes-Pipeline')
+        }
+        columns {
+          status()
+          weather()
+          name()
+          lastSuccess()
+          lastFailure()
+          lastDuration()
+          buildButton()
         }
       }
