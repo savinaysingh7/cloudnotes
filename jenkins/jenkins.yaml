@@ -1,4 +1,5 @@
 jenkins:
+  systemMessage: "CloudNotes Automated CI/CD Pipeline"
   securityRealm:
     local:
       allowsSignup: false
@@ -6,5 +7,28 @@ jenkins:
         - id: "admin"
           password: "admin"
   authorizationStrategy:
-    loggedInUsersCanDoAnything:
-      allowAnonymousRead: false
+    globalMatrix:
+      permissions:
+        - "Overall/Administer:admin"
+        - "Overall/Read:authenticated"
+
+unclassified:
+  location:
+    url: "http://REPLACE_ME_JENKINS_IP:8080/"
+
+jobs:
+  - script: >
+      pipelineJob('CloudNotes-Pipeline') {
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://github.com/savinaysingh7/cloudnotes.git')
+                }
+                branches('main')
+              }
+            }
+          }
+        }
+      }
