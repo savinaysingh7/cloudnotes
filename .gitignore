@@ -21,6 +21,7 @@ notes.db
 Thumbs.db
 
 # Secrets — NEVER commit these
+.secrets/
 *.pem
 *.key
 cloudnotes_key
@@ -30,3 +31,6 @@ temp_key.txt
 docker/.env
 start_automated.ps1
 update_hook.ps1
+creds_*.groovy
+jenkins_creds*.groovy
+list_creds.groovy

@@ -1,8 +1,8 @@
 FROM jenkins/jenkins:lts-jdk21
 USER root
-RUN apt-get update && apt-get install -y curl
+RUN apt-get update && apt-get install -y curl openssh-client
 # Install plugins on build
-RUN jenkins-plugin-cli --plugins "git github workflow-aggregator docker-workflow credentials-binding configuration-as-code job-dsl matrix-auth ssh-agent ws-cleanup"
+RUN jenkins-plugin-cli --plugins "git github workflow-aggregator docker-workflow credentials-binding configuration-as-code job-dsl matrix-auth ssh-agent ssh-credentials ws-cleanup"
 # Disable setup wizard
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
 

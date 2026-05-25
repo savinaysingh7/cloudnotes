@@ -28,6 +28,11 @@ module "jenkins_ec2" {
                 mkdir -p /opt/jenkins
                 git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /tmp/repo
                 cp /tmp/repo/jenkins/jenkins.yaml /opt/jenkins/jenkins.yaml
+                mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+                if compgen -G "/tmp/repo/jenkins/init.groovy.d/*.groovy" > /dev/null; then
+                  cp /tmp/repo/jenkins/init.groovy.d/*.groovy /opt/jenkins/init.groovy.d/
+                fi
+                chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
                 
                 # Update Jenkins URL in yaml
                 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
@@ -47,6 +52,8 @@ module "jenkins_ec2" {
                   -e CASC_JENKINS_CONFIG="/var/jenkins_home/jenkins.yaml" \
                   -v jenkins_home:/var/jenkins_home \
                   -v /opt/jenkins/jenkins.yaml:/var/jenkins_home/jenkins.yaml \
+                  -v /opt/jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d \
+                  -v /opt/jenkins/cloudnotes-secrets:/var/jenkins_home/cloudnotes-secrets:ro \
                   -v /var/run/docker.sock:/var/run/docker.sock \
                   -v /usr/bin/docker:/usr/bin/docker \
                   cloudnotes-jenkins
