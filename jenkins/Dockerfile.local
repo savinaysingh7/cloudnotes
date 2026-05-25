@@ -2,8 +2,8 @@ FROM jenkins/jenkins:lts-jdk21
 USER root
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y curl openssh-client && rm -rf /var/lib/apt/lists/*
 # Install plugins on build
-RUN jenkins-plugin-cli --plugins "git github workflow-aggregator docker-workflow credentials-binding configuration-as-code job-dsl matrix-auth ssh-agent ssh-credentials ws-cleanup"
-# Disable setup wizard
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+RUN jenkins-plugin-cli --plugins "git github workflow-aggregator docker-workflow credentials-binding configuration-as-code job-dsl matrix-auth ssh-agent ssh-credentials ws-cleanup pipeline-stage-view pipeline-graph-view"
+# Disable setup wizard and keep the classic Stage View block off the job page.
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -Dorg.jenkinsci.pipeline.stageview.disabledOnMainJobPage=true"
 
 USER jenkins
