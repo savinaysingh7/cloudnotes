@@ -60,3 +60,7 @@ CloudNotes is a containerized note-taking application designed to demonstrate th
 
 ---
 *Developed for the Cloud & DevOps Fundamentals Course.*
+
+
+---
+*This commit was made to test the automated Jenkins pipeline trigger.*
