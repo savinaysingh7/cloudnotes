@@ -33,6 +33,10 @@ module "jenkins_ec2" {
                 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
                 sed -i "s/REPLACE_ME_JENKINS_IP/$PUBLIC_IP/g" /opt/jenkins/jenkins.yaml
 
+                # Build custom Jenkins image with plugins
+                cd /tmp/repo/jenkins
+                docker build -t cloudnotes-jenkins -f Dockerfile.local .
+
                 docker volume create jenkins_home
                 docker run -d \
                   --name jenkins \
@@ -40,13 +44,12 @@ module "jenkins_ec2" {
                   --user root \
                   -p 8080:8080 \
                   -p 50000:50000 \
-                  -e JAVA_OPTS="-Djenkins.install.runSetupWizard=false" \
                   -e CASC_JENKINS_CONFIG="/var/jenkins_home/jenkins.yaml" \
                   -v jenkins_home:/var/jenkins_home \
                   -v /opt/jenkins/jenkins.yaml:/var/jenkins_home/jenkins.yaml \
                   -v /var/run/docker.sock:/var/run/docker.sock \
                   -v /usr/bin/docker:/usr/bin/docker \
-                  jenkins/jenkins:lts-jdk21
+                  cloudnotes-jenkins
                 EOF
 }
 
