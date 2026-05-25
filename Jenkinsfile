@@ -29,12 +29,8 @@ pipeline {
         stage('Backend Tests') {
             steps {
                 script {
-                    sh """
-                    python3 -m venv .venv
-                    . .venv/bin/activate
-                    pip install --no-cache-dir -r app/backend/requirements.txt
-                    PYTHONPATH=app/backend pytest app/backend/tests
-                    """
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} ./app/backend"
+                    sh "docker run --rm -e PYTHONPATH=. ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} pytest"
                 }
             }
         }
@@ -72,7 +68,7 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ./app/backend"
+                    sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}"
                     sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ./app/frontend"
                 }
             }
