@@ -129,18 +129,28 @@ sudo chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
 sudo chmod 644 /opt/jenkins/init.groovy.d/creds.groovy
 sudo chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key /opt/jenkins/cloudnotes-secrets/dockerhub_password
 
+for attempt in $(seq 1 120); do
+  if sudo docker info >/dev/null 2>&1 && sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
+    break
+  fi
+  sleep 10
+done
+
 if ! sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
-  echo "Jenkins container is not available yet."
+  echo "Timed out waiting for Jenkins container."
   exit 1
 fi
 
-sudo docker exec jenkins mkdir -p /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
-sudo docker cp /opt/jenkins/init.groovy.d/creds.groovy jenkins:/var/jenkins_home/init.groovy.d/creds.groovy
-sudo docker cp /opt/jenkins/cloudnotes-secrets/app_ssh_private_key jenkins:/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
-sudo docker cp /opt/jenkins/cloudnotes-secrets/dockerhub_password jenkins:/var/jenkins_home/cloudnotes-secrets/dockerhub_password
-sudo docker exec jenkins chown -R jenkins:jenkins /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
-sudo docker exec jenkins chmod 644 /var/jenkins_home/init.groovy.d/creds.groovy
-sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/app_ssh_private_key /var/jenkins_home/cloudnotes-secrets/dockerhub_password
+if ! sudo docker inspect jenkins --format '{{range .Mounts}}{{println .Destination}}{{end}}' | grep -qx /var/jenkins_home/cloudnotes-secrets; then
+  sudo docker exec jenkins mkdir -p /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
+  sudo docker cp /opt/jenkins/init.groovy.d/creds.groovy jenkins:/var/jenkins_home/init.groovy.d/creds.groovy
+  sudo docker cp /opt/jenkins/cloudnotes-secrets/app_ssh_private_key jenkins:/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
+  sudo docker cp /opt/jenkins/cloudnotes-secrets/dockerhub_password jenkins:/var/jenkins_home/cloudnotes-secrets/dockerhub_password
+  sudo docker exec jenkins chown -R jenkins:jenkins /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
+  sudo docker exec jenkins chmod 644 /var/jenkins_home/init.groovy.d/creds.groovy
+  sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/app_ssh_private_key /var/jenkins_home/cloudnotes-secrets/dockerhub_password
+fi
+
 sudo docker restart jenkins >/dev/null
 echo "Jenkins restarted after credential installation."
 '@, $Utf8NoBom)
@@ -178,7 +188,7 @@ if (-not (Test-Path -LiteralPath $PemPathInput)) {
     throw "Missing SSH private key: $PemPathInput"
 }
 $PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
-$script:SshOptions = @("-i", $PemPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "ConnectTimeout=15")
+$script:SshOptions = @("-i", $PemPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
 
 Write-Host "Initializing Terraform..."
 terraform -chdir=terraform init -no-color | Out-Null
@@ -252,4 +262,3 @@ Write-Host " "
 Write-Host " Note: It will take ~5 mins for Docker to finish"
 Write-Host " installing and building the app on the server."
 Write-Host "========================================="
-pause

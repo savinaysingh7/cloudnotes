@@ -1,7 +1,9 @@
 {
+  "uid": "cloudnotes-prod",
   "title": "CloudNotes Production Dashboard",
+  "tags": ["cloudnotes", "production"],
   "refresh": "5s",
-  "version": 2,
+  "version": 3,
   "time": {
     "to": "now",
     "from": "now-1h"

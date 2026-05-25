@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+    }
+
     triggers {
         githubPush()
     }
@@ -15,20 +20,50 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
+        stage('Code Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Backend Tests') {
+            steps {
+                script {
+                    sh """
+                    python3 -m venv .venv
+                    . .venv/bin/activate
+                    pip install --no-cache-dir -r app/backend/requirements.txt
+                    PYTHONPATH=app/backend pytest app/backend/tests
+                    """
+                }
             }
         }
 
         stage('Security Scan') {
             steps {
                 script {
-                    // Scan for hardcoded secrets in the codebase
-                    sh """
-                    pip install trufflehog 2>/dev/null || true
-                    trufflehog filesystem . --only-verified --json 2>/dev/null | head -20 || echo 'No verified secrets found - OK'
-                    """
+                    sh '''
+                    set -eu
+                    if ! command -v trufflehog >/dev/null 2>&1; then
+                        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+                    fi
+
+                    set +e
+                    trufflehog filesystem . --only-verified --json > trufflehog.json
+                    scan_status=$?
+                    set -e
+
+                    if [ "$scan_status" -ne 0 ] && [ "$scan_status" -ne 183 ]; then
+                        exit "$scan_status"
+                    fi
+
+                    if [ -s trufflehog.json ]; then
+                        cat trufflehog.json
+                        exit 1
+                    fi
+
+                    echo "No verified secrets found - OK"
+                    '''
                     echo "Secret scan complete"
                 }
             }
@@ -39,15 +74,6 @@ pipeline {
                 script {
                     sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ./app/backend"
                     sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ./app/frontend"
-                }
-            }
-        }
-
-        stage('Backend Tests') {
-            steps {
-                script {
-                    // Set PYTHONPATH and use a more standard testing call
-                    sh "docker run --rm -e PYTHONPATH=. ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} pytest"
                 }
             }
         }
@@ -106,6 +132,18 @@ pipeline {
                             cd /app
                             sudo docker compose pull
                             sudo docker compose up -d --remove-orphans
+                            sudo docker compose restart prometheus grafana
+
+                            for attempt in \$(seq 1 30); do
+                                if curl -fsS http://localhost/ >/dev/null && curl -fsS http://localhost:5000/api/health >/dev/null; then
+                                    exit 0
+                                fi
+                                sleep 5
+                            done
+
+                            echo "Deployment health check failed"
+                            sudo docker compose ps
+                            exit 1
                         "
                         """
                     }

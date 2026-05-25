@@ -11,7 +11,12 @@ groups:
           description: "The backend target has been unreachable for more than 1 minute."
 
       - alert: HighErrorRate
-        expr: rate(flask_http_request_total{status=~"5.."}[5m]) > 0.1
+        expr: |
+          (
+            sum(rate(flask_http_request_total{status=~"5.."}[5m]))
+            /
+            sum(rate(flask_http_request_total[5m]))
+          ) > 0.10
         for: 2m
         labels:
           severity: critical
@@ -20,7 +25,7 @@ groups:
           description: "More than 10% of requests are returning 5xx errors."
 
       - alert: HighRequestLatency
-        expr: histogram_quantile(0.95, rate(flask_http_request_duration_seconds_bucket[5m])) > 1
+        expr: histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le)) > 1
         for: 3m
         labels:
           severity: warning
@@ -35,4 +40,4 @@ groups:
           severity: info
         annotations:
           summary: "No notes created in the last hour"
-          description: "User activity may have dropped — no new notes created."
+          description: "User activity may have dropped; no new notes created."

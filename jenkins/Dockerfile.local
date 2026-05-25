@@ -1,6 +1,6 @@
 FROM jenkins/jenkins:lts-jdk21
 USER root
-RUN apt-get update && apt-get install -y curl openssh-client
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y curl openssh-client python3 python3-venv && rm -rf /var/lib/apt/lists/*
 # Install plugins on build
 RUN jenkins-plugin-cli --plugins "git github workflow-aggregator docker-workflow credentials-binding configuration-as-code job-dsl matrix-auth ssh-agent ssh-credentials ws-cleanup"
 # Disable setup wizard
