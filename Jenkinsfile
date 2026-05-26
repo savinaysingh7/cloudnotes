@@ -15,7 +15,7 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
-        APP_SERVER_IP   = '13.127.252.102'
+        APP_SERVER_IP   = '13.233.123.203'
         PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
 
