@@ -112,9 +112,9 @@ pipeline {
                         sh """
                         echo "POSTGRES_DB=cloudnotes" > docker/.env
                         echo "POSTGRES_USER=admin" >> docker/.env
-                        echo "POSTGRES_PASSWORD=secret123" >> docker/.env
-                        echo "DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes" >> docker/.env
-                        echo "GF_SECURITY_ADMIN_PASSWORD=admin" >> docker/.env
+                        echo "POSTGRES_PASSWORD=\${POSTGRES_PASSWORD:-CHANGE_ME}" >> docker/.env
+                        echo "DATABASE_URL=\${DATABASE_URL:-postgresql://admin:\${POSTGRES_PASSWORD:-CHANGE_ME}@db:5432/cloudnotes}" >> docker/.env
+                        echo "GF_SECURITY_ADMIN_PASSWORD=\${GF_SECURITY_ADMIN_PASSWORD:-CHANGE_ME}" >> docker/.env
 
                         ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "sudo mkdir -p /app && sudo chown ubuntu:ubuntu /app"
                         scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.prod.yml ubuntu@\${APP_SERVER_IP}:/app/docker-compose.yml
