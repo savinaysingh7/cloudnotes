@@ -8,13 +8,17 @@ This project is a full-scale DevOps showcase. You can run it in three different 
 Use this for quick development and local testing.
 
 1.  **Open Docker Desktop** on your computer and make sure it is running.
-2.  Open a terminal (PowerShell) at the root of the project and run:
+2.  Create your local environment file from the template:
+    ```powershell
+    copy docker/.env.example docker/.env
+    ```
+3.  Open a terminal (PowerShell) at the root of the project and run:
     ```powershell
     docker-compose -f docker/docker-compose.yml up --build -d
     ```
-3.  **Access the app:** [http://localhost:80](http://localhost:80)
-4.  **Access Monitoring:**
-    *   **Grafana:** [http://localhost:3001](http://localhost:3001) (User: `admin`, Pass: `admin`)
+4.  **Access the app:** [http://localhost:80](http://localhost:80)
+5.  **Access Monitoring:**
+    *   **Grafana:** [http://localhost:3001](http://localhost:3001) (User: `admin`, Pass: value of `GF_SECURITY_ADMIN_PASSWORD` in `docker/.env`)
     *   **Prometheus:** [http://localhost:9091](http://localhost:9091)
 
 ### Recovery
@@ -49,7 +53,7 @@ This is your real, live internet deployment.
 *   **Production App:** [http://13.206.199.155](http://13.206.199.155)
 *   **Jenkins CI/CD:** [http://13.201.50.42:8080](http://13.201.50.42:8080)
     *   **User:** `admin`
-    *   **Password:** `8767317fd394488ba28b0f28445c1d44`
+    *   **Password:** `CHANGE_ME` (set in `jenkins/jenkins.yaml` before deployment)
 
 ---
 
