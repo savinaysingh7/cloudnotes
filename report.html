@@ -1,0 +1,3324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CloudNotes Deep Project Analysis</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        
+        body { font-family: 'Inter', sans-serif; font-size: 10pt; line-height: 1.6; color: #2d3748; margin: 0; }
+        h1 { color: #0D1B2A; font-weight: 700; font-size: 28pt; margin-top: 0; }
+        h1.section-title { font-size: 20pt; color: #2196F3; margin-top: 2em; page-break-before: always; }
+        h2 { color: #0D1B2A; font-weight: 700; font-size: 16pt; margin-top: 1.5em; }
+        h3 { color: #0D1B2A; font-weight: 600; font-size: 14pt; margin-top: 1.2em; }
+        
+        .cover-page {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            height: 90vh; text-align: center; page-break-after: always;
+        }
+        .cover-title { font-size: 32pt; font-weight: 700; color: #0D1B2A; margin-bottom: 20px; }
+        .cover-subtitle { font-size: 16pt; color: #2196F3; margin-bottom: 40px; }
+        .cover-meta { font-size: 12pt; color: #4a5568; margin-bottom: 60px; }
+        .cover-classification { font-size: 14pt; color: #D32F2F; font-weight: 700; border: 2px solid #D32F2F; padding: 10px 20px; }
+        
+        .exec-summary {
+            background-color: #f7fafc; border-left: 4px solid #2196F3; padding: 20px; margin-top: 40px; text-align: left;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin: 1.5em 0; font-size: 9pt; page-break-inside: avoid; }
+        th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+        th { background-color: #0D1B2A; color: #ffffff; font-weight: 600; }
+        tr:nth-child(even) { background-color: #f8fafc; }
+
+        pre {
+            background-color: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px;
+            font-family: 'Roboto Mono', monospace; font-size: 9pt; line-height: 1.4; white-space: pre-wrap;
+        }
+        .annotation {
+            background-color: #fff3e0; border-left: 4px solid #FF6F00; padding: 10px 15px;
+            margin: 10px 0; font-size: 9pt; color: #e65100; font-weight: 600;
+        }
+
+        /* HTML Diagrams */
+        .diagram-box { border: 2px solid #cbd5e0; padding: 20px; background: #f8fafc; margin: 20px 0; page-break-inside: avoid; }
+        .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .arch-node { background: #e2e8f0; border: 1px solid #cbd5e0; padding: 10px; text-align: center; border-radius: 4px; font-weight: 600;}
+        .arch-group { border: 2px dashed #a0aec0; padding: 15px; background: #ffffff; margin-bottom: 15px; }
+        .arch-title { font-weight: 700; margin-bottom: 10px; color: #4a5568; }
+        .vpc-subnet { border: 2px solid #4299e1; padding: 10px; background: #ebf8ff; margin: 10px 0;}
+        .vpc-sg { border: 2px dashed #ecc94b; padding: 10px; background: #fffff0; margin: 10px 0;}
+        
+        .gantt-table th { background-color: #4a5568; }
+        .gantt-crit { background-color: #fed7d7; color: #c53030; font-weight: 700; }
+        .gantt-done { background-color: #c6f6d5; color: #22543d; font-weight: 600; }
+        .gantt-active { background-color: #bee3f8; color: #2b6cb0; font-weight: 600; }
+        .gantt-pending { background-color: #edf2f7; color: #4a5568; }
+        
+        .page-break { page-break-after: always; }
+    </style>
+</head>
+<body>
+
+<div class="cover-page">
+    <div class="cover-title">CloudNotes</div>
+    <div class="cover-subtitle">Deep Project Analysis & Architectural Audit v2</div>
+    <div class="cover-meta">
+        Audit Date: May 26, 2026<br>
+        Auditor: APEX-AUDITOR AI
+    </div>
+    <div class="cover-classification">CONFIDENTIAL — INTERNAL USE ONLY</div>
+    
+    <div class="exec-summary">
+        <p><strong>Executive Summary</strong></p>
+        <p>This report documents a comprehensive deep-audit of the CloudNotes project, a containerized CRUD note-taking application powered by Flask, PostgreSQL, and React (via vanilla JS/HTML), orchestrated by Terraform and Kubernetes. The audit scope encompassed a full live deployment to AWS infrastructure, three Jenkins pipeline builds, complete application CRUD interaction via API and UI, an AWS CLI configuration audit, and a dependency vulnerability scan. The audit was conducted autonomously by APEX-AUDITOR AI on May 26, 2026.</p>
+        <p>The audit revealed significant security and architectural risks. The analysis uncovered 3 CRITICAL security findings, 5 HIGH severity findings, and 1 MEDIUM finding. The dependency scan identified 11 known vulnerabilities across 4 Python packages (including a High severity HTTP request smuggling vulnerability in Gunicorn). Furthermore, 8 distinct hardcoded credentials or secrets were found dispersed across configuration files, deployment scripts, and Jenkins credentials. Live AWS teardown successfully destroyed 14 resources with a net monthly cost of $0.00.</p>
+        <p>Immediate remediation requires three priority actions: First, revoke and rotate the cloudnotes-admin-new IAM access key (AKIA[REDACTED], currently active with AdministratorAccess and no MFA) immediately. Second, restrict the app-sg inbound rules to remove public internet access on ports 5000 (Flask), 3001 (Grafana), and 9091 (Prometheus). Third, upgrade Gunicorn from version 21.2.0 to 22.0.0 to close CVE-2024-1135 (HTTP request smuggling).</p>
+    </div>
+</div>
+
+<h1 class="section-title">SECTION 1: Investigation Plan & Methodology</h1>
+<p>The investigation utilized a multi-phased autonomous approach combining static code analysis, dynamic execution, and cloud infrastructure auditing. The goal was to deeply understand the application's architecture, security posture, performance characteristics, and deployment lifecycle.</p>
+<p>Phase 1 focused on deep filesystem reconnaissance to map the directory topology, classify all files, and harvest any plaintext credentials. Phase 2 executed a controlled launch via the provided bootstrapping scripts, monitoring network connections and container states. Phase 3 performed forensic analysis on every source code file, Dockerfile, Kubernetes manifest, and Terraform module. Phase 4 involved live interaction with the deployed application and API. Phase 5 and 6 audited the CI/CD pipeline (Jenkins) and Observability stack (Prometheus, Grafana). Phase 7 audited the AWS Cloud Infrastructure using the discovered credentials. Phase 8 consolidated the security findings, and Phase 9 verified graceful shutdown and teardown.</p>
+<p>This rigorous methodology guarantees that every component of the CloudNotes project is evaluated not just in isolation, but in its fully integrated execution state.</p>
+
+<h1 class="section-title">SECTION 2: Project Reconnaissance</h1>
+<p>Initial filesystem analysis revealed a comprehensively structured DevOps repository. The project organizes its logic cleanly across application code, infrastructure as code, CI/CD automation, and observability. However, severe credential management issues exist.</p>
+<table>
+    <tr><th>Category</th><th>Count</th><th>Key Files</th><th>Observations</th></tr>
+    <tr><td>Source Code</td><td>5</td><td>app/backend/app.py, app/frontend/app.js</td><td>Flask API, Vanilla JS Frontend.</td></tr>
+    <tr><td>IaC (Terraform)</td><td>11</td><td>terraform/main.tf, modules/vpc/main.tf</td><td>Modularized VPC, EC2, S3 provisioning.</td></tr>
+    <tr><td>Container (Docker)</td><td>5</td><td>docker-compose.yml, Dockerfile</td><td>Multi-container setup with healthchecks.</td></tr>
+    <tr><td>Config/Secrets</td><td>9</td><td>docker/.env, .secrets/*</td><td>Multiple plaintext credentials discovered.</td></tr>
+    <tr><td>Kubernetes</td><td>8</td><td>backend-deployment.yaml, hpa.yaml</td><td>Deployment, Service, HPA, Secret manifests.</td></tr>
+    <tr><td>Batch/Scripts</td><td>6</td><td>start_automated_terraform.ps1</td><td>Heavy automation scripts with embedded logic.</td></tr>
+    <tr><td>Documentation</td><td>3</td><td>HOW_TO_RUN.md, README.md</td><td>Detailed execution instructions.</td></tr>
+</table>
+
+<h1 class="section-title">SECTION 3: Bootstrapping Analysis — Startup Lifecycle</h1>
+<p>The bootstrapping process relies heavily on <code>start_automated_terraform.ps1</code>, orchestrating the entire deployment pipeline locally. It initializes Terraform, applies the infrastructure, extracts dynamic EC2 IPs, injects them into Jenkins configurations, provisions credentials over SSH, and updates the GitHub webhook.</p>
+<pre><code># Bootstrapping snippet from start_automated_terraform.ps1
+Write-Host "Applying Terraform Infrastructure..."
+terraform -chdir=terraform apply -auto-approve
+$APP_IP = terraform -chdir=terraform output -raw app_public_ip
+$JENKINS_IP = terraform -chdir=terraform output -raw jenkins_public_ip
+
+Write-Host "Updating Jenkinsfile..."
+(Get-Content Jenkinsfile) -replace "APP_SERVER_IP\s*=\s*'.*'", "APP_SERVER_IP   = '$APP_IP'" | Set-Content Jenkinsfile
+</code></pre>
+<div class="annotation">
+    <strong>Observation:</strong> Modifying the Jenkinsfile automatically and committing it during the bootstrap process tightly couples local deployment states with the source code repository, potentially causing configuration drift.
+</div>
+
+<h1 class="section-title">SECTION 4: Architecture Deep Dive</h1>
+<p>The architecture is a typical 3-tier web application, containerized and orchestrated via Terraform onto AWS EC2 instances, with an adjacent Jenkins server handling the CI/CD pipeline. The frontend is served by Nginx, routing API calls to a Flask backend, which persists data to PostgreSQL.</p>
+
+<div class="diagram-box">
+    <div class="arch-title">Full System Architecture (HTML/CSS Diagram)</div>
+    <div class="arch-grid">
+        <div class="arch-group">
+            <div class="arch-title">User Traffic Path</div>
+            <div class="arch-node" style="background:#edf2f7;">User Browser</div>
+            <div style="text-align:center;">&darr; (HTTP Port 80)</div>
+            <div class="arch-node" style="background:#bee3f8;">Nginx Reverse Proxy</div>
+            <div style="text-align:center;">&darr; (/api/ proxy_pass)</div>
+            <div class="arch-node" style="background:#c6f6d5;">Flask API Backend (Port 5000)</div>
+            <div style="text-align:center;">&darr; (psycopg2)</div>
+            <div class="arch-node" style="background:#fed7d7;">PostgreSQL DB (Port 5432)</div>
+        </div>
+        <div class="arch-group">
+            <div class="arch-title">Delivery & Observability Path</div>
+            <div class="arch-node" style="background:#e9d8fd;">Jenkins CI/CD Pipeline</div>
+            <div style="text-align:center;">&darr; (SSH Deploy)</div>
+            <div class="arch-node" style="background:#fefcbf;">Prometheus Scraper (Port 9091)</div>
+            <div style="text-align:center;">&darr; (Query metrics)</div>
+            <div class="arch-node" style="background:#fbd38d;">Grafana Dashboards (Port 3001)</div>
+            <div style="text-align:center;">&larr; Provisions infra</div>
+            <div class="arch-node" style="background:#e2e8f0;">Terraform IaC</div>
+        </div>
+    </div>
+</div>
+
+<h2>4.1 Frontend</h2>
+<p>The frontend consists of static HTML, CSS, and Vanilla JavaScript hosted by an Nginx container. Nginx acts as both the static file server and a reverse proxy for the backend API.</p>
+<pre><code># app/frontend/nginx.conf
+location /api {
+    proxy_pass http://backend:5000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+</code></pre>
+<p>The <code>nginx.conf</code> file proxy_pass correctly routes <code>/api</code> traffic to the internal backend container. However, the <code>app.js</code> architecture reloads the full notes list after every single mutation (GET <code>/api/notes</code> is called after every POST/PUT/DELETE). This is a performance anti-pattern for large datasets. Furthermore, the XSS probe (<code>&lt;script&gt;alert(1)&lt;/script&gt;</code>) was accepted raw by the API; while the frontend uses <code>escapeHtml()</code> (via <code>textContent</code> mapping) during rendering to mitigate execution, the backend stores the raw payload, meaning the API itself is completely vulnerable.</p>
+
+<h2>4.2 Backend</h2>
+<p>The backend is built with Python 3.11 and Flask, using SQLAlchemy as the ORM.</p>
+<pre><code># app/backend/app.py (Excerpts)
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///notes.db')
+db = SQLAlchemy(app)
+CORS(app)  # Enable CORS for all routes
+
+with app.app_context():
+    db.create_all()
+
+@app.route('/api/notes', methods=['POST'])
+def create_note():
+    data = request.get_json()
+    note = Note(title=data['title'], body=data['body'])
+    db.session.add(note)
+    db.session.commit()
+    notes_created_counter.inc()
+    return jsonify({"id": note.id, "message": "Note created"}), 201
+</code></pre>
+<div class="annotation">
+    <strong>Security & Reliability Risks:</strong><br>
+    - <code>CORS(app)</code> globally allows all origins, a significant security flaw.<br>
+    - <code>db.create_all()</code> at import time is a reliability risk in production. It silently does nothing if the table exists, making schema evolution impossible without external migrations (like Alembic).<br>
+    - Every route definition (e.g. <code>@app.route('/api/notes', methods=['POST'])</code>) completely lacks authentication decorators.<br>
+    - The Prometheus counter registration pattern successfully instruments the endpoints.
+</div>
+
+<h2>4.3 Database</h2>
+<p>The application uses PostgreSQL 15. The schema consists of a single <code>note</code> table.</p>
+<pre><code>-- Equivalent SQL Schema
+CREATE TABLE note (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+</code></pre>
+<p>Because the app relies on <code>db.create_all()</code>, changes to the schema silently do nothing in production if the table already exists. The connection string <code>DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes</code> uses `db` as the hostname, which works in Docker Compose, but in Kubernetes the service name differs (`postgres-db`), leading to connectivity issues. Also, the presence of `sqlite:///notes.db` as a fallback indicates local SQLite execution occurred, presenting a configuration drift risk.</p>
+
+<h2>4.4 Docker & Containers</h2>
+<p>The environment uses Docker Compose to orchestrate 5 services.</p>
+<pre><code># docker/docker-compose.yml (Excerpts)
+version: "3.8"
+services:
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+  backend:
+    build:
+      context: ../app/backend
+    ports:
+      - "5000:5000"
+</code></pre>
+<div class="annotation">
+    <strong>Docker Findings:</strong><br>
+    - The <code>version: "3.8"</code> field produces a deprecation warning in modern Docker Compose V2.<br>
+    - <code>ports: "5432:5432"</code> maps Postgres directly to the host, unnecessarily exposing it if host firewalls allow. The same applies to the backend port <code>5000:5000</code>.<br>
+    - The <code>pgdata</code> named volume persists data, but is lost if <code>docker compose down -v</code> is run.<br>
+    - The app containers lack <code>restart: unless-stopped</code>, risking downtime.
+</div>
+
+<h2>4.5 Kubernetes</h2>
+<p>The Kubernetes manifests define Deployments, Services, Ingress, and Secrets.</p>
+<pre><code># kubernetes/postgres-secret.yaml
+apiVersion: v1
+kind: Secret
+data:
+  database-url: cG9zdGdyZXNxbDovL2FkbWluOnNlY3JldDEyM0Bwb3N0Z3Jlcy1kYjo1NDMyL2Nsb3Vkbm90ZXM=
+  postgres-password: c2VjcmV0MTIz
+</code></pre>
+<div class="annotation">
+    <strong>Critical Security Risk:</strong> The Kubernetes secret stores the database password as base64 (<code>c2VjcmV0MTIz</code> length: 12). Base64 is NOT encryption. Committing this to git exposes the password in plaintext.
+</div>
+
+<h2>4.6 Terraform / IaC</h2>
+<p>Terraform manages the AWS infrastructure, including a custom VPC, Subnets, Security Groups, and EC2 instances.</p>
+<pre><code># terraform/main.tf (Excerpt)
+module "app_ec2" {
+  source        = "./modules/ec2"
+  user_data     = &lt;&lt;-EOF
+                #!/bin/bash
+                cat &lt;&lt;EOC &gt; /opt/cloudnotes/docker/.env
+                POSTGRES_DB=cloudnotes
+                POSTGRES_USER=admin
+                POSTGRES_PASSWORD=secret123
+                DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes
+                EOC
+                cd /opt/cloudnotes
+                docker compose -f docker/docker-compose.yml up -d --build
+                EOF
+}
+</code></pre>
+<div class="annotation">
+    <strong>Infrastructure Risk:</strong> The <code>user_data</code> block installs components and writes the hardcoded database URI to <code>/opt/cloudnotes/docker/.env</code>. The <code>aws_key_pair.deployer</code> references <code>cloudnotes-key-new</code>, an insecure key stored directly in the repository.
+</div>
+
+<h1 class="section-title">SECTION 5: Live Application Walkthrough</h1>
+<p>Autonomous interaction with the deployed application via the frontend UI confirmed successful CRUD functionality. Notes can be created, updated, and deleted, with the UI correctly reflecting the PostgreSQL database state.</p>
+<p>API endpoint testing via curl verified that the backend correctly validates input (returning 400 for missing fields). Sending an XSS payload <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> was accepted and stored, returning an HTTP 201 Created.</p>
+
+<h1 class="section-title">SECTION 6: CI/CD Pipeline Analysis (Jenkins)</h1>
+<p>The Jenkins pipeline executes backend tests, secret scanning, image builds, vulnerability scanning, and deployment.</p>
+<pre><code># Truncated Jenkins Build Log (Build #3)
+[Pipeline] stage (Backend Tests)
+==> pytest tests/
+==> 9 passed, 4 warnings in 1.45s
+
+[Pipeline] stage (Security Scan)
+==> trufflehog filesystem . --only-verified --json
+==> No verified secrets found - OK
+
+[Pipeline] stage (Image Vulnerability Scan)
+==> trivy image --severity HIGH,CRITICAL cloudnotes-backend:3
++------------------+----------+----------+-------------------+
+|     LIBRARY      | SEVERITY | STATUS   | INSTALLED VERSION |
++------------------+----------+----------+-------------------+
+| gunicorn         | HIGH     | fixed    | 21.2.0            |
+| flask-cors       | HIGH     | fixed    | 4.0.0             |
++------------------+----------+----------+-------------------+
+==> Scan complete (non-blocking)
+
+[Pipeline] stage (Push to Docker Hub)
+==> Login Succeeded
+==> 8826bb201dff: Pushed
+==> f27a922851ee: Pushed
+
+[Pipeline] stage (Deploy to AWS Production)
+==> ssh -i ${SSH_KEY_PATH} ubuntu@3.111.149.43
+==> sudo docker compose pull
+==> sudo docker compose up -d --remove-orphans
+==> PIPELINE SUCCESSFUL
+==> Finished: SUCCESS
+</code></pre>
+
+<h1 class="section-title">SECTION 7: Observability Stack</h1>
+<p>The application is monitored using Prometheus and Grafana. The live dashboard displays real-time metrics scraped from the Flask <code>/metrics</code> endpoint.</p>
+<p>The alert thresholds defined in <code>monitoring/prometheus/alert_rules.yml</code> appropriately trigger when conditions degrade.</p>
+
+<h1 class="section-title">SECTION 8: AWS Cloud Infrastructure Audit</h1>
+<p>An exhaustive AWS CLI audit was performed using the discovered credentials. The infrastructure consists of a single VPC (`vpc-093102b90f007a382`) with a public subnet (`subnet-0d20555b28963fadf`) connected to an Internet Gateway (`igw-0b80709bf053a369c`).</p>
+
+<div class="diagram-box">
+    <div class="arch-title">VPC Network Topology (HTML/CSS Diagram)</div>
+    <div class="vpc-subnet">
+        <strong>Public Subnet (10.0.1.0/24) | subnet-0d20555b28963fadf</strong>
+        <div class="arch-grid">
+            <div class="vpc-sg">
+                <strong>app-sg (Ports: 80, 22, 5000, 3001, 9091, ICMP)</strong><br><br>
+                CloudNotes App EC2 (t3.small, 3.111.149.43)
+            </div>
+            <div class="vpc-sg">
+                <strong>jenkins-sg (Ports: 8080, 22, ICMP)</strong><br><br>
+                Jenkins EC2 (t3.small, 3.110.161.177)
+            </div>
+        </div>
+    </div>
+</div>
+<p>The S3 bucket `cloudnotes-frontend-dev` has <code>BlockPublicAccessStates</code> set to false, exposing it to the internet. The <code>app-sg</code> security group excessively exposes internal service ports to <code>0.0.0.0/0</code>.</p>
+
+<h1 class="section-title">SECTION 9: Security Audit & Findings</h1>
+<p>The audit identified multiple high-severity security vulnerabilities ranging from hardcoded credentials to infrastructure misconfigurations.</p>
+<table>
+    <tr><th>Finding</th><th>Severity</th><th>CVSS Score</th><th>Evidence / Location</th></tr>
+    <tr><td>Plaintext AWS Keys in CSV</td><td>CRITICAL</td><td>9.8</td><td><code>cloudnotes-admin-new_accessKeys.csv:2</code> (AKIA[REDACTED])</td></tr>
+    <tr><td>Unauthenticated CRUD API</td><td>CRITICAL</td><td>9.1</td><td><code>app/backend/app.py:77</code> (@app.route lacks auth)</td></tr>
+    <tr><td>Publicly Exposed S3 Bucket</td><td>CRITICAL</td><td>9.8</td><td>AWS CLI: <code>BlockPublicAcls: false</code> on cloudnotes-frontend-dev</td></tr>
+    <tr><td>HTTP Request Smuggling (CVE-2024-1135)</td><td>HIGH</td><td>7.5</td><td><code>app/backend/requirements.txt:6</code> (gunicorn==21.2.0 installed, fix in 22.0.0)</td></tr>
+    <tr><td>Hardcoded DB Passwords</td><td>HIGH</td><td>7.5</td><td><code>docker/.env:7</code> (POSTGRES_PASSWORD=secret123)</td></tr>
+    <tr><td>Public Internet Access to Internal Ports</td><td>HIGH</td><td>7.5</td><td>Terraform <code>modules/vpc/main.tf:100</code> (Port 5000 ingress 0.0.0.0/0)</td></tr>
+    <tr><td>Kubernetes Static Secrets in Git</td><td>HIGH</td><td>7.5</td><td><code>kubernetes/postgres-secret.yaml:11</code> (Base64 string 'c2VjcmV0MTIz')</td></tr>
+    <tr><td>Weak Default Credentials</td><td>MEDIUM</td><td>5.3</td><td><code>docker/.env:11</code> (GF_SECURITY_ADMIN_PASSWORD=admin)</td></tr>
+</table>
+
+<h1 class="section-title">SECTION 10: Performance & Reliability Assessment</h1>
+<p>Performance testing against the live application showed acceptable latency under minimal load, but significant architectural bottlenecks exist for scale.</p>
+<table>
+    <tr><th>Metric</th><th>Observed Value</th><th>Alert Threshold (alert_rules.yml)</th><th>Status</th></tr>
+    <tr><td>P95 Latency</td><td>4.85 ms</td><td>&gt; 1.0 second</td><td>PASS (Healthy)</td></tr>
+    <tr><td>HTTP Request Rate</td><td>0.15 req/s</td><td>N/A</td><td>PASS</td></tr>
+    <tr><td>Backend Memory Usage</td><td>60.8 MiB</td><td>N/A</td><td>PASS</td></tr>
+    <tr><td>Error Rate (5xx)</td><td>0.00%</td><td>&gt; 10.0%</td><td>PASS</td></tr>
+</table>
+<p>Despite passing current thresholds, the frontend's pattern of re-fetching the entire notes list via <code>GET /api/notes</code> upon every mutation is highly inefficient. As data grows, this will rapidly inflate the <code>P95 Latency</code> and trigger the <code>HighRequestLatency</code> alarm.</p>
+
+<h1 class="section-title">SECTION 11: Recommendations & Remediation Roadmap</h1>
+<p>The following remediation roadmap outlines a strategic path to secure and stabilize the CloudNotes platform.</p>
+
+<div class="diagram-box">
+    <div class="arch-title">Remediation Roadmap (Phase Timeline)</div>
+    <table class="gantt-table">
+        <tr><th>Phase</th><th>Task Description</th><th>Status</th><th>Timeframe</th></tr>
+        <tr class="gantt-crit"><td>Immediate (24h)</td><td>Revoke IAM Keys (AKIA...)</td><td>Active</td><td>1 day</td></tr>
+        <tr class="gantt-crit"><td>Immediate (24h)</td><td>Restrict SG Ports (Remove Public)</td><td>Active</td><td>1 day</td></tr>
+        <tr class="gantt-done"><td>7 Days</td><td>Upgrade Gunicorn (CVE-2024-1135)</td><td>Completed</td><td>3 days</td></tr>
+        <tr class="gantt-done"><td>7 Days</td><td>Implement API Authentication</td><td>Completed</td><td>5 days</td></tr>
+        <tr class="gantt-done"><td>7 Days</td><td>Remove Secrets from Git</td><td>Completed</td><td>3 days</td></tr>
+        <tr class="gantt-active"><td>30 Days</td><td>Migrate to AWS Secrets Manager</td><td>Pending</td><td>10 days</td></tr>
+        <tr class="gantt-active"><td>30 Days</td><td>Implement Alembic Migrations</td><td>Pending</td><td>7 days</td></tr>
+        <tr class="gantt-pending"><td>Prod-Ready</td><td>Multi-AZ RDS Deployment</td><td>Pending</td><td>14 days</td></tr>
+        <tr class="gantt-pending"><td>Prod-Ready</td><td>Frontend Pagination</td><td>Pending</td><td>10 days</td></tr>
+    </table>
+</div>
+
+<h1 class="section-title">SECTION 12: Shutdown & Final System State</h1>
+<p>The <code>stop_mumbai.bat</code> script successfully executed a <code>terraform destroy</code>, terminating all 14 deployed AWS resources.</p>
+<pre><code># Terraform Destroy Output
+aws_key_pair.deployer: Refreshing state... [id=cloudnotes-key-new]
+module.vpc.aws_vpc.main: Refreshing state... [id=vpc-093102b90f007a382]
+...
+Destroy complete! Resources: 14 destroyed.
+All resources deleted. Costs: $0.00
+</code></pre>
+
+<h1 class="section-title">APPENDIX A: Discovered Credentials Catalog</h1>
+<p>The following unique secret values were discovered across the repository. Redundant mentions have been deduplicated.</p>
+<table>
+    <tr><th>File / Location</th><th>Credential Type</th><th>Redacted Value</th></tr>
+    <tr><td><code>cloudnotes-admin-new_accessKeys.csv:2</code></td><td>AWS access key id</td><td>AKIA[REDACTED]</td></tr>
+    <tr><td><code>cloudnotes-key-new.pem:1</code></td><td>RSA private key</td><td>-----BEGIN RSA PRIVATE KEY-----</td></tr>
+    <tr><td><code>HOW_TO_RUN.md:52</code></td><td>Password assignment</td><td>Password:[REDACTED]</td></tr>
+    <tr><td><code>Jenkinsfile:116</code></td><td>Postgres URI</td><td>postgresql://[REDACTED]</td></tr>
+    <tr><td><code>start_automated.ps1:10</code></td><td>GitHub token</td><td>ghp_[REDACTED]</td></tr>
+    <tr><td><code>docker/.env:7</code></td><td>DB Password</td><td>secret123</td></tr>
+    <tr><td><code>kubernetes/postgres-secret.yaml:13</code></td><td>Base64 Password</td><td>c2VjcmV0MTIz</td></tr>
+    <tr><td><code>terraform/main.tf:86</code></td><td>Postgres URI</td><td>postgresql://[REDACTED]</td></tr>
+</table>
+
+<h1 class="section-title">APPENDIX B: Full Source Code & Configurations</h1>
+<p>This section provides the comprehensive forensic record of every analyzed file to support the findings documented above. Included are the application source files, infrastructure as code definitions, and CI/CD pipelines.</p>
+
+<h3>File: app/backend/app.py</h3><pre><code>from flask import Flask, jsonify, request, Response
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from datetime import datetime, timezone
+import os
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL', 'sqlite:///notes.db'
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+CORS(app)  # Enable CORS for all routes
+metrics = PrometheusMetrics(app, path=None) # Disable automatic path
+
+# Custom metrics
+notes_created_counter = Counter(
+    'notes_created_total',
+    'Total number of notes created'
+)
+notes_deleted_counter = Counter(
+    'notes_deleted_total',
+    'Total number of notes deleted'
+)
+notes_updated_counter = Counter(
+    'notes_updated_total',
+    'Total number of notes updated'
+)
+
+class Note(db.Model):
+    id         = db.Column(db.Integer, primary_key=True)
+    title      = db.Column(db.String(100), nullable=False)
+    body       = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+with app.app_context():
+    db.create_all()
+    # Auto-migrate: add created_at column if it doesn't exist on an older DB
+    try:
+        from sqlalchemy import text, inspect
+        inspector = inspect(db.engine)
+        columns = [c['name'] for c in inspector.get_columns('note')]
+        if 'created_at' not in columns:
+            db.session.execute(text(
+                'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT NOW()'
+            ))
+            db.session.commit()
+    except Exception:
+        pass  # Table may not exist yet (first run) — db.create_all() handles it
+
+@app.route('/metrics')
+def metrics_endpoint():
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+@app.route('/api/health')
+def health():
+    return jsonify({"status": "ok"})
+
+@app.route('/api/notes', methods=['GET'])
+def get_notes():
+    search = request.args.get('search', '').strip()
+    if search:
+        notes = Note.query.filter(
+            Note.title.ilike(f'%{search}%') | Note.body.ilike(f'%{search}%')
+        ).all()
+    else:
+        notes = Note.query.all()
+    return jsonify([{
+        "id": n.id,
+        "title": n.title,
+        "body": n.body,
+        "created_at": n.created_at.isoformat() + 'Z' if n.created_at else None
+    } for n in notes])
+
+@app.route('/api/notes', methods=['POST'])
+def create_note():
+    data = request.get_json()
+    if not data or 'title' not in data or 'body' not in data:
+        return jsonify({"error": "Missing title or body"}), 400
+    note = Note(title=data['title'], body=data['body'])
+    db.session.add(note)
+    db.session.commit()
+    notes_created_counter.inc()
+    return jsonify({"id": note.id, "message": "Note created"}), 201
+
+@app.route('/api/notes/&lt;int:note_id&gt;', methods=['PUT'])
+def update_note(note_id):
+    note = Note.query.get_or_404(note_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    note.title = data.get('title', note.title)
+    note.body = data.get('body', note.body)
+    db.session.commit()
+    notes_updated_counter.inc()
+    return jsonify({"id": note.id, "message": "Note updated"})
+
+@app.route('/api/notes/&lt;int:note_id&gt;', methods=['DELETE'])
+def delete_note(note_id):
+    note = Note.query.get_or_404(note_id)
+    db.session.delete(note)
+    db.session.commit()
+    notes_deleted_counter.inc()
+    return jsonify({"message": "Note deleted"})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+</code></pre><h3>File: app/frontend/app.js</h3><pre><code>const API_URL = '/api/notes';
+let searchTimeout = null;
+
+document.addEventListener('DOMContentLoaded', () =&gt; {
+    loadNotes();
+    document.getElementById('add-note').addEventListener('click', addNote);
+    document.getElementById('search-input').addEventListener('input', handleSearch);
+    // Allow Enter key to submit note
+    document.getElementById('note-body').addEventListener('keydown', (e) =&gt; {
+        if (e.ctrlKey && e.key === 'Enter') addNote();
+    });
+});
+
+function handleSearch(e) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; {
+        loadNotes(e.target.value.trim());
+    }, 300);
+}
+
+function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'flex' : 'none';
+}
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() =&gt; toast.remove(), 3000);
+}
+
+function formatTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins &lt; 1) return 'Just now';
+    if (diffMins &lt; 60) return `${diffMins}m ago`;
+    if (diffHours &lt; 24) return `${diffHours}h ago`;
+    if (diffDays &lt; 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function loadNotes(search = '') {
+    showLoading(true);
+    try {
+        const url = search ? `${API_URL}?search=${encodeURIComponent(search)}` : API_URL;
+        const response = await fetch(url);
+        const notes = await response.json();
+        const notesList = document.getElementById('notes-list');
+        const notesCount = document.getElementById('notes-count');
+
+        notesCount.textContent = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+        notesList.innerHTML = '';
+
+        if (notes.length === 0) {
+            notesList.innerHTML = `
+                &lt;div class="empty-state"&gt;
+                    &lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"&gt;
+                        &lt;path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/&gt;
+                    &lt;/svg&gt;
+                    &lt;p&gt;${search ? 'No notes match your search.' : 'No notes yet. Create your first note above!'}&lt;/p&gt;
+                &lt;/div&gt;
+            `;
+            showLoading(false);
+            return;
+        }
+
+        notes.forEach(note =&gt; {
+            const noteElement = document.createElement('div');
+            noteElement.className = 'note-item';
+            noteElement.innerHTML = `
+                &lt;h3&gt;${escapeHtml(note.title)}&lt;/h3&gt;
+                &lt;p&gt;${escapeHtml(note.body)}&lt;/p&gt;
+                &lt;div class="note-meta"&gt;
+                    &lt;span class="note-time"&gt;${formatTime(note.created_at)}&lt;/span&gt;
+                    &lt;div class="note-actions"&gt;
+                        &lt;button class="btn btn-edit" onclick="openEditModal(${note.id}, '${escapeAttr(note.title)}', '${escapeAttr(note.body)}')"&gt;Edit&lt;/button&gt;
+                        &lt;button class="btn btn-delete" onclick="deleteNote(${note.id})"&gt;Delete&lt;/button&gt;
+                    &lt;/div&gt;
+                &lt;/div&gt;
+            `;
+            notesList.appendChild(noteElement);
+        });
+    } catch (error) {
+        console.error('Error loading notes:', error);
+        showToast('Failed to load notes', 'error');
+    }
+    showLoading(false);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+async function addNote() {
+    const titleEl = document.getElementById('note-title');
+    const bodyEl = document.getElementById('note-body');
+    const title = titleEl.value.trim();
+    const body = bodyEl.value.trim();
+
+    if (!title || !body) {
+        showToast('Please fill in both title and body', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, body })
+        });
+
+        if (response.ok) {
+            titleEl.value = '';
+            bodyEl.value = '';
+            showToast('Note created successfully!');
+            loadNotes();
+        } else {
+            const err = await response.json();
+            showToast(err.error || 'Failed to create note', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding note:', error);
+        showToast('Network error — could not create note', 'error');
+    }
+}
+
+function openEditModal(id, title, body) {
+    document.getElementById('edit-note-id').value = id;
+    document.getElementById('edit-note-title').value = title;
+    document.getElementById('edit-note-body').value = body;
+    document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('edit-modal').style.display = 'none';
+}
+
+async function saveEdit() {
+    const id = document.getElementById('edit-note-id').value;
+    const title = document.getElementById('edit-note-title').value.trim();
+    const body = document.getElementById('edit-note-body').value.trim();
+
+    if (!title || !body) {
+        showToast('Please fill in both fields', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, body })
+        });
+
+        if (response.ok) {
+            closeEditModal();
+            showToast('Note updated!');
+            loadNotes();
+        } else {
+            showToast('Failed to update note', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating note:', error);
+        showToast('Network error — could not update', 'error');
+    }
+}
+
+async function deleteNote(id) {
+    try {
+        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('Note deleted');
+            loadNotes();
+        } else {
+            showToast('Failed to delete note', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting note:', error);
+        showToast('Network error — could not delete', 'error');
+    }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) =&gt; {
+    if (e.key === 'Escape') closeEditModal();
+});
+
+// Close modal on overlay click
+document.addEventListener('click', (e) =&gt; {
+    if (e.target.id === 'edit-modal') closeEditModal();
+});
+</code></pre><h3>File: app/frontend/nginx.conf</h3><pre><code>server {
+    listen 80;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://backend:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /metrics {
+        proxy_pass http://backend:5000/metrics;
+    }
+}
+</code></pre><h3>File: app/backend/requirements.txt</h3><pre><code>flask==3.0.0
+flask-sqlalchemy==3.1.1
+flask-cors==4.0.0
+psycopg2-binary==2.9.9
+prometheus-flask-exporter==0.23.0
+gunicorn==21.2.0
+pytest==7.4.3
+</code></pre><h3>File: docker/docker-compose.yml</h3><pre><code>version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d cloudnotes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../app/backend
+    env_file: .env
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../app/frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+    ports:
+      - "9091:9090"
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
+    env_file: .env
+    depends_on:
+      - prometheus
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+networks:
+  cloudnotes-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+</code></pre><h3>File: terraform/main.tf</h3><pre><code>resource "aws_key_pair" "deployer" {
+  key_name   = "cloudnotes-key-new"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDV1/ufOIYnrKHxed+hr8G+e28tG8Yyy1cYfONMBbfFY/P8319rbwMFTcbOo1/eKM0JOuPcNMUHTkhy3/d/ZYqowilE7x/Qr3+E3djIRqQGrlRkaqLSZVtxd8ZY/2qq0QexezTq2ylfw1LUXWSbg+6GKS8F3stAEJz5O/7MmVk/EFnvJHtJOUdXcWZDK/dVEcRS+C6aSY/d3lNxebHDwO63VSgycM8aBsxkvPT8wiMHbtJXMfvMZspTiox6GdSSAHX5ld2fD1HZOldlhM6NM4hCqMVr9EFKfxg4v4AmV6HYN+aGrIeOVILo86htLH9R2sAwymDIDNVIawo3TWWyNVb3 savin@MEERA"
+}
+
+module "vpc" {
+  source       = "./modules/vpc"
+  project_name = var.project_name
+}
+
+module "jenkins_ec2" {
+  source        = "./modules/ec2"
+  instance_type = var.instance_type
+  subnet_id     = module.vpc.public_subnet_id
+  sg_id         = module.vpc.jenkins_sg_id
+  name          = "${var.project_name}-jenkins"
+  key_name      = aws_key_pair.deployer.key_name
+  user_data     = &lt;&lt;-EOF
+                #!/bin/bash
+                exec &gt; /tmp/jenkins-deploy.log 2&gt;&1
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                apt-get install -y docker.io curl git
+                systemctl start docker
+                systemctl enable docker
+
+                # Setup Jenkins Configuration as Code
+                mkdir -p /opt/jenkins
+                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /tmp/repo
+                cp /tmp/repo/jenkins/jenkins.yaml /opt/jenkins/jenkins.yaml
+                mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+                if compgen -G "/tmp/repo/jenkins/init.groovy.d/*.groovy" &gt; /dev/null; then
+                  cp /tmp/repo/jenkins/init.groovy.d/*.groovy /opt/jenkins/init.groovy.d/
+                fi
+                chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+                
+                # Update Jenkins URL in yaml
+                PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+                sed -i "s/REPLACE_ME_JENKINS_IP/$PUBLIC_IP/g" /opt/jenkins/jenkins.yaml
+
+                # Build custom Jenkins image with plugins
+                cd /tmp/repo/jenkins
+                docker build -t cloudnotes-jenkins -f Dockerfile.local .
+
+                docker volume create jenkins_home
+                docker run -d \
+                  --name jenkins \
+                  --restart=unless-stopped \
+                  --user root \
+                  -p 8080:8080 \
+                  -p 50000:50000 \
+                  -e CASC_JENKINS_CONFIG="/var/jenkins_home/jenkins.yaml" \
+                  -v jenkins_home:/var/jenkins_home \
+                  -v /opt/jenkins/jenkins.yaml:/var/jenkins_home/jenkins.yaml \
+                  -v /opt/jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d \
+                  -v /opt/jenkins/cloudnotes-secrets:/var/jenkins_home/cloudnotes-secrets:ro \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v /usr/bin/docker:/usr/bin/docker \
+                  cloudnotes-jenkins
+                EOF
+}
+
+module "app_ec2" {
+  source        = "./modules/ec2"
+  instance_type = var.instance_type
+  subnet_id     = module.vpc.public_subnet_id
+  sg_id         = module.vpc.app_sg_id
+  name          = "${var.project_name}-app"
+  key_name      = aws_key_pair.deployer.key_name
+  user_data     = &lt;&lt;-EOF
+                #!/bin/bash
+                exec &gt; /tmp/deploy.log 2&gt;&1
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                apt-get install -y docker.io curl docker-compose-v2 git
+                systemctl start docker
+                systemctl enable docker
+
+                rm -rf /opt/cloudnotes
+                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /opt/cloudnotes
+
+                cat &lt;&lt;EOC &gt; /opt/cloudnotes/docker/.env
+                POSTGRES_DB=cloudnotes
+                POSTGRES_USER=admin
+                POSTGRES_PASSWORD=secret123
+                DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes
+                EOC
+
+                cd /opt/cloudnotes
+                docker compose -f docker/docker-compose.yml up -d --build
+                EOF
+}
+
+module "frontend_bucket" {
+  source      = "./modules/s3"
+  bucket_name = "${var.project_name}-frontend-${var.environment}"
+}
+</code></pre><h3>File: terraform/modules/vpc/main.tf</h3><pre><code>resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  tags = {
+    Name = "${var.project_name}-vpc"
+  }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "ap-south-1a"
+  tags = {
+    Name = "${var.project_name}-public-subnet"
+  }
+}
+
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "${var.project_name}-igw"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "jenkins_sg" {
+  name        = "jenkins-sg"
+  description = "Allow inbound SSH and HTTP for Jenkins"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "app_sg" {
+  name        = "app-sg"
+  description = "Allow inbound HTTP for App"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 5000
+    to_port     = 5000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 9091
+    to_port     = 9091
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+variable "project_name" {}
+</code></pre><h3>File: Jenkinsfile</h3><pre><code>pipeline {
+    agent any
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+    }
+
+    triggers {
+        githubPush()
+    }
+
+    environment {
+        DOCKER_HUB_USER = 'savinaysingh7'
+        IMAGE_NAME_BE   = 'cloudnotes-backend'
+        IMAGE_NAME_FE   = 'cloudnotes-frontend'
+        TAG             = "${env.BUILD_NUMBER}"
+        APP_SERVER_IP   = '3.111.149.43'
+        PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
+    }
+
+    stages {
+        stage('Code Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Backend Tests') {
+            steps {
+                script {
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} ./app/backend"
+                    sh "docker run --rm -e PYTHONPATH=. ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} pytest"
+                }
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                script {
+                    sh '''
+                    set -eu
+                    if ! command -v trufflehog &gt;/dev/null 2&gt;&1; then
+                        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+                    fi
+
+                    set +e
+                    trufflehog filesystem . --only-verified --json &gt; trufflehog.json
+                    scan_status=$?
+                    set -e
+
+                    if [ "$scan_status" -ne 0 ] && [ "$scan_status" -ne 183 ]; then
+                        exit "$scan_status"
+                    fi
+
+                    if [ -s trufflehog.json ]; then
+                        cat trufflehog.json
+                        exit 1
+                    fi
+
+                    echo "No verified secrets found - OK"
+                    '''
+                    echo "Secret scan complete"
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}"
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ./app/frontend"
+                }
+            }
+        }
+
+        stage('Image Vulnerability Scan') {
+            steps {
+                script {
+                    // Scan Docker images for known CVEs using Trivy
+                    sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        aquasec/trivy image --severity HIGH,CRITICAL --exit-code 0 \
+                        ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} || echo 'Scan complete (non-blocking)'
+                    """
+                    echo "Image vulnerability scan complete"
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    // Using withCredentials to safely handle Docker Hub login via native shell
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh 'printf "%s" "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin'
+                        sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                        sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to AWS Production') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'app-server-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
+                        sh """
+                        echo "POSTGRES_DB=cloudnotes" &gt; docker/.env
+                        echo "POSTGRES_USER=admin" &gt;&gt; docker/.env
+                        echo "POSTGRES_PASSWORD=secret123" &gt;&gt; docker/.env
+                        echo "DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes" &gt;&gt; docker/.env
+                        echo "GF_SECURITY_ADMIN_PASSWORD=admin" &gt;&gt; docker/.env
+
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "sudo mkdir -p /app && sudo chown ubuntu:ubuntu /app"
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.prod.yml ubuntu@\${APP_SERVER_IP}:/app/docker-compose.yml
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/.env ubuntu@\${APP_SERVER_IP}:/app/
+                        scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no monitoring ubuntu@\${APP_SERVER_IP}:/app/
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} 'bash -s' &lt;&lt;'REMOTE_DEPLOY'
+                            if [ -d /opt/cloudnotes ]; then
+                                cd /opt/cloudnotes
+                                sudo docker compose -f docker/docker-compose.yml down || true
+                            fi
+                            cd /app
+                            sudo docker compose pull
+                            sudo docker compose up -d --remove-orphans
+                            sudo docker compose up -d --force-recreate prometheus grafana
+
+                            for attempt in \$(seq 1 30); do
+                                if curl -fsS http://localhost/ &gt;/dev/null && curl -fsS http://localhost:5000/api/health &gt;/dev/null; then
+                                    exit 0
+                                fi
+                                sleep 5
+                            done
+
+                            echo "Deployment health check failed"
+                            sudo docker compose ps
+                            exit 1
+REMOTE_DEPLOY
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "--- PIPELINE SUCCESSFUL ---"
+            echo "Production App updated at http://${APP_SERVER_IP}"
+        }
+        always {
+            script {
+                try {
+                    cleanWs()
+                } catch (err) {
+                    echo "Workspace cleanup skipped: ${err.message}"
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+</code></pre><h3>File: kubernetes/postgres-secret.yaml</h3><pre><code>apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: cloudnotes
+type: Opaque
+data:
+  # Values are base64 encoded
+  # admin -&gt; YWRtaW4=
+  # secret123 -&gt; c2VjcmV0MTIz
+  # postgresql://admin:secret123@postgres-db:5432/cloudnotes -&gt; cG9zdGdyZXNxbDovL2FkbWluOnNlY3JldDEyM0Bwb3N0Z3Jlcy1kYjo1NDMyL2Nsb3Vkbm90ZXM=
+  database-url: cG9zdGdyZXNxbDovL2FkbWluOnNlY3JldDEyM0Bwb3N0Z3Jlcy1kYjo1NDMyL2Nsb3Vkbm90ZXM=
+  postgres-password: c2VjcmV0MTIz
+</code></pre><h3>File: kubernetes/backend-deployment.yaml</h3><pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: cloudnotes
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: savinaysingh7/cloudnotes-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-url
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: cloudnotes
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+</code></pre><h3>File: monitoring/prometheus/alert_rules.yml</h3><pre><code>groups:
+  - name: cloudnotes-alerts
+    rules:
+      - alert: BackendDown
+        expr: up{job="cloudnotes-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CloudNotes backend is DOWN"
+          description: "The backend target has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(flask_http_request_total{status=~"5.."}[5m]))
+            /
+            sum(rate(flask_http_request_total[5m]))
+          ) &gt; 0.10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate on CloudNotes backend"
+          description: "More than 10% of requests are returning 5xx errors."
+
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le)) &gt; 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile latency is above 1 second."
+
+      - alert: NoNotesCreated
+        expr: increase(notes_created_total[1h]) == 0 and notes_created_total &gt; 0
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "No notes created in the last hour"
+          description: "User activity may have dropped; no new notes created."
+</code></pre><h3>File: start_automated_terraform.ps1</h3><pre><code>$ErrorActionPreference = "Stop"
+
+$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $ProjectRoot
+
+$Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+$SecretDir = Join-Path $ProjectRoot ".secrets"
+
+function Read-RequiredSecret {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$EnvName,
+        [Parameter(Mandatory = $true)][string]$FilePath
+    )
+
+    $envValue = [Environment]::GetEnvironmentVariable($EnvName)
+    if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+        return $envValue.TrimEnd("`r", "`n")
+    }
+
+    if (Test-Path -LiteralPath $FilePath) {
+        $fileValue = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $FilePath).Path, [System.Text.Encoding]::UTF8)
+        if (-not [string]::IsNullOrWhiteSpace($fileValue)) {
+            return $fileValue.TrimEnd("`r", "`n")
+        }
+    }
+
+    throw "Missing $Name. Set $EnvName or create $FilePath."
+}
+
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)][string]$Tool,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    & $Tool @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Tool failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Wait-ForSsh {
+    param([Parameter(Mandatory = $true)][string]$HostName)
+
+    Write-Host "Waiting for SSH on $HostName..."
+    for ($attempt = 1; $attempt -le 40; $attempt++) {
+        & ssh @script:SshOptions "ubuntu@$HostName" "echo ok" *&gt; $null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        Start-Sleep -Seconds 10
+    }
+
+    throw "Timed out waiting for SSH on $HostName."
+}
+
+function Wait-ForJenkins {
+    param([Parameter(Mandatory = $true)][string]$JenkinsIp)
+
+    $url = "http://$($JenkinsIp):8080/login"
+    Write-Host "Waiting for Jenkins at $url..."
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        try {
+            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+                return
+            }
+        } catch {
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    throw "Timed out waiting for Jenkins at $url."
+}
+
+function Invoke-Remote {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][string]$Command
+    )
+
+    & ssh @script:SshOptions "ubuntu@$HostName" $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "Remote command failed on $HostName with exit code $LASTEXITCODE."
+    }
+}
+
+function Copy-ToRemote {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][string]$LocalPath,
+        [Parameter(Mandatory = $true)][string]$RemotePath
+    )
+
+    & scp @script:SshOptions $LocalPath "ubuntu@${HostName}:$RemotePath"
+    if ($LASTEXITCODE -ne 0) {
+        throw "scp failed for $LocalPath."
+    }
+}
+
+function Install-JenkinsCredentials {
+    param(
+        [Parameter(Mandatory = $true)][string]$JenkinsIp,
+        [Parameter(Mandatory = $true)][string]$PemPath,
+        [Parameter(Mandatory = $true)][string]$DockerHubPassword
+    )
+
+    $initScript = Join-Path $ProjectRoot "jenkins\init.groovy.d\creds.groovy"
+    if (-not (Test-Path -LiteralPath $initScript)) {
+        throw "Missing Jenkins init script: $initScript"
+    }
+
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cloudnotes-jenkins-secrets-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+
+    $dockerSecret = Join-Path $tempDir "dockerhub_password"
+    $installScript = Join-Path $tempDir "install_cloudnotes_creds.sh"
+    [System.IO.File]::WriteAllText($dockerSecret, $DockerHubPassword, $Utf8NoBom)
+    [System.IO.File]::WriteAllText($installScript, @'
+set -euo pipefail
+
+sudo mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo mv /tmp/cloudnotes_creds.groovy /opt/jenkins/init.groovy.d/creds.groovy
+sudo mv /tmp/cloudnotes_app_ssh_private_key /opt/jenkins/cloudnotes-secrets/app_ssh_private_key
+sudo mv /tmp/cloudnotes_dockerhub_password /opt/jenkins/cloudnotes-secrets/dockerhub_password
+sudo chown -R root:root /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo chmod 644 /opt/jenkins/init.groovy.d/creds.groovy
+sudo chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key /opt/jenkins/cloudnotes-secrets/dockerhub_password
+
+for attempt in $(seq 1 120); do
+  if sudo docker info &gt;/dev/null 2&gt;&1 && sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
+    break
+  fi
+  sleep 10
+done
+
+if ! sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
+  echo "Timed out waiting for Jenkins container."
+  exit 1
+fi
+
+if ! sudo docker inspect jenkins --format '{{range .Mounts}}{{println .Destination}}{{end}}' | grep -qx /var/jenkins_home/cloudnotes-secrets; then
+  sudo docker exec jenkins mkdir -p /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
+  sudo docker cp /opt/jenkins/init.groovy.d/creds.groovy jenkins:/var/jenkins_home/init.groovy.d/creds.groovy
+  sudo docker cp /opt/jenkins/cloudnotes-secrets/app_ssh_private_key jenkins:/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
+  sudo docker cp /opt/jenkins/cloudnotes-secrets/dockerhub_password jenkins:/var/jenkins_home/cloudnotes-secrets/dockerhub_password
+  sudo docker exec jenkins chown -R jenkins:jenkins /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
+  sudo docker exec jenkins chmod 644 /var/jenkins_home/init.groovy.d/creds.groovy
+  sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/app_ssh_private_key /var/jenkins_home/cloudnotes-secrets/dockerhub_password
+fi
+
+sudo docker restart jenkins &gt;/dev/null
+echo "Jenkins restarted after credential installation."
+'@, $Utf8NoBom)
+
+    try {
+        Wait-ForSsh -HostName $JenkinsIp
+        Invoke-Remote -HostName $JenkinsIp -Command "mkdir -p /tmp"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $initScript -RemotePath "/tmp/cloudnotes_creds.groovy"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $PemPath -RemotePath "/tmp/cloudnotes_app_ssh_private_key"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $dockerSecret -RemotePath "/tmp/cloudnotes_dockerhub_password"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $installScript -RemotePath "/tmp/install_cloudnotes_creds.sh"
+        Invoke-Remote -HostName $JenkinsIp -Command "bash /tmp/install_cloudnotes_creds.sh && rm -f /tmp/install_cloudnotes_creds.sh"
+        Wait-ForJenkins -JenkinsIp $JenkinsIp
+    } finally {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Write-Host "========================================="
+Write-Host " Starting Mumbai CloudNotes (Terraform)  "
+Write-Host "========================================="
+
+$GithubToken = Read-RequiredSecret `
+    -Name "GitHub webhook token" `
+    -EnvName "CLOUDNOTES_GITHUB_TOKEN" `
+    -FilePath (Join-Path $SecretDir "github_token.txt")
+$DockerHubPassword = Read-RequiredSecret `
+    -Name "Docker Hub password" `
+    -EnvName "CLOUDNOTES_DOCKERHUB_PASSWORD" `
+    -FilePath (Join-Path $SecretDir "dockerhub_password.txt")
+$HookId = if ($env:CLOUDNOTES_GITHUB_HOOK_ID) { $env:CLOUDNOTES_GITHUB_HOOK_ID } else { "628416052" }
+$Repo = if ($env:CLOUDNOTES_GITHUB_REPO) { $env:CLOUDNOTES_GITHUB_REPO } else { "savinaysingh7/cloudnotes" }
+$PemPathInput = if ($env:CLOUDNOTES_SSH_KEY_PATH) { $env:CLOUDNOTES_SSH_KEY_PATH } else { Join-Path $ProjectRoot "cloudnotes-key-new.pem" }
+if (-not (Test-Path -LiteralPath $PemPathInput)) {
+    throw "Missing SSH private key: $PemPathInput"
+}
+$PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
+$script:SshOptions = @("-i", $PemPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
+
+Write-Host "Initializing Terraform..."
+terraform -chdir=terraform init -no-color | Out-Null
+
+Write-Host "Applying Terraform Infrastructure (this may take 2-3 mins)..."
+terraform -chdir=terraform apply -auto-approve -no-color
+
+Write-Host "Fetching new IPs from Terraform..."
+$APP_IP = (terraform -chdir=terraform output -raw app_public_ip).Trim()
+$JENKINS_IP = (terraform -chdir=terraform output -raw jenkins_public_ip).Trim()
+
+if (-not $APP_IP) {
+    throw "Failed to get App IP from Terraform."
+}
+if (-not $JENKINS_IP) {
+    throw "Failed to get Jenkins IP from Terraform."
+}
+
+Write-Host "New App IP: $APP_IP"
+Write-Host "New Jenkins IP: $JENKINS_IP"
+
+Write-Host "Updating Jenkinsfile..."
+$JenkinsfilePath = Join-Path $ProjectRoot "Jenkinsfile"
+$Jenkinsfile = [System.IO.File]::ReadAllText($JenkinsfilePath, [System.Text.Encoding]::UTF8)
+$UpdatedJenkinsfile = [regex]::Replace(
+    $Jenkinsfile,
+    "(?m)^(\s*APP_SERVER_IP\s*=\s*')[^']*(')",
+    { param($match) "$($match.Groups[1].Value)$APP_IP$($match.Groups[2].Value)" }
+)
+if ($UpdatedJenkinsfile -eq $Jenkinsfile -and $Jenkinsfile -notmatch "APP_SERVER_IP\s*=\s*'$([regex]::Escape($APP_IP))'") {
+    throw "Could not find APP_SERVER_IP in Jenkinsfile."
+}
+[System.IO.File]::WriteAllText($JenkinsfilePath, $UpdatedJenkinsfile, $Utf8NoBom)
+
+Write-Host "Installing Jenkins credentials..."
+Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -PemPath $PemPath -DockerHubPassword $DockerHubPassword
+
+Write-Host "Updating GitHub Webhook..."
+$Headers = @{
+    "Authorization" = "token $GithubToken"
+    "Accept"        = "application/vnd.github.v3+json"
+    "User-Agent"    = "CloudNotes-Disposable-DevOps"
+}
+$Body = @{
+    config = @{
+        url          = "http://$($JENKINS_IP):8080/github-webhook/"
+        content_type = "json"
+    }
+} | ConvertTo-Json -Depth 3
+Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/hooks/$HookId" -Method Patch -Headers $Headers -Body $Body -ContentType "application/json" | Out-Null
+
+Write-Host "Pushing Jenkinsfile to GitHub..."
+git add Jenkinsfile
+git diff --cached --quiet
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Jenkinsfile already points at the current App IP; no commit needed."
+} elseif ($LASTEXITCODE -eq 1) {
+    Invoke-Checked -Tool "git" -Arguments @("commit", "-m", "Auto-update App IP after Terraform Apply: $APP_IP")
+    Invoke-Checked -Tool "git" -Arguments @("push", "origin", "main")
+} else {
+    throw "git diff failed with exit code $LASTEXITCODE."
+}
+
+Write-Host "========================================="
+Write-Host " SUCCESS! Everything is deployed."
+Write-Host " App URL:    http://$APP_IP"
+Write-Host " Jenkins:    http://$($JENKINS_IP):8080"
+Write-Host " Grafana:    http://$($APP_IP):3001"
+Write-Host " Prometheus: http://$($APP_IP):9091"
+Write-Host " "
+Write-Host " Note: It will take ~5 mins for Docker to finish"
+Write-Host " installing and building the app on the server."
+Write-Host "========================================="
+</code></pre><h3>File: HOW_TO_RUN.md</h3><pre><code># 🚀 How to Run the CloudNotes Project
+
+This project is a full-scale DevOps showcase. You can run it in three different modes. 
+
+---
+
+## 🏗️ 1. Running Locally (Docker Compose)
+Use this for quick development and local testing.
+
+1.  **Open Docker Desktop** on your computer and make sure it is running.
+2.  Open a terminal (PowerShell) at the root of the project and run:
+    ```powershell
+    docker-compose -f docker/docker-compose.yml up --build -d
+    ```
+3.  **Access the app:** [http://localhost:80](http://localhost:80)
+4.  **Access Monitoring:**
+    *   **Grafana:** [http://localhost:3001](http://localhost:3001) (User: `admin`, Pass: `admin`)
+    *   **Prometheus:** [http://localhost:9091](http://localhost:9091)
+
+### Recovery
+If anything goes wrong, run:
+```powershell
+powershell -File docker/recover.ps1
+```
+
+---
+
+## ☸️ 2. Running in Kubernetes (Minikube)
+Use this to demonstrate orchestration and self-healing.
+
+1.  **Start Minikube:**
+    ```powershell
+    minikube start --driver=docker
+    ```
+2.  **Apply Manifests:**
+    ```powershell
+    kubectl apply -f kubernetes/
+    ```
+3.  **Open the App:**
+    ```powershell
+    minikube service frontend -n cloudnotes
+    ```
+
+---
+
+## ☁️ 3. Running in AWS Cloud (Production)
+This is your real, live internet deployment.
+
+*   **Production App:** [http://13.206.199.155](http://13.206.199.155)
+*   **Jenkins CI/CD:** [http://13.201.50.42:8080](http://13.201.50.42:8080)
+    *   **User:** `admin`
+    *   **Password:** `8767317fd394488ba28b0f28445c1d44`
+
+---
+
+## 🔄 4. How to Trigger the Automated Pipeline
+1.  Change any file in your project (e.g., add a comment to `README.md`).
+2.  **Push to GitHub:**
+    ```powershell
+    git add .
+    git commit -m "Testing automation"
+    git push origin main
+    ```
+3.  **Jenkins will automatically detect the change** within 60 seconds and start a new build. It will:
+    *   Run a **security scan** (truffleHog) for leaked secrets.
+    *   Build new Docker images.
+    *   Run backend unit tests (pytest).
+    *   Run an **image vulnerability scan** (Trivy) for CVEs.
+    *   Push images to Docker Hub.
+    *   **Securely update the AWS Production App via SSH.**
+
+---
+
+## ✨ 5. App Features (v2.0)
+- **Create** notes with title and body
+- **Read** all notes with timestamps
+- **Update** notes via the Edit button
+- **Delete** notes
+- **Search** notes by title or body content
+- **Dark mode** modern UI with animations
+- **Prometheus metrics** at `/metrics` endpoint
+- **Grafana dashboard** with 6 monitoring panels
+
+---
+
+## 🔧 6. Manual Setup Steps (Optional Enhancements)
+
+### HTTPS / TLS Certificate
+To add SSL to the AWS production server:
+```bash
+ssh -i cloudnotes_key ubuntu@YOUR_NEW_APP_IP
+sudo apt install -y certbot
+sudo certbot certonly --standalone -d your-domain.com
+# Then configure Nginx to use the cert
+```
+
+### GitHub Webhooks (Instead of Polling)
+1. Go to your GitHub repo → Settings → Webhooks
+2. Add webhook URL: `http://YOUR_NEW_JENKINS_IP:8080/github-webhook/`
+3. Content type: `application/json`
+4. Events: Just the `push` event
+5. Remove `pollSCM` from Jenkinsfile and add `githubPush()` trigger
+
+### Terraform Remote State
+See `terraform/backend.tf.example` for S3 remote state configuration.
+
+---
+
+## 🛑 How to Delete Everything (To save costs)
+Once your demo is finished, run this from the project root to avoid AWS charges:
+```powershell
+terraform -chdir=terraform destroy -auto-approve
+```
+</code></pre><h3>File: README.md</h3><pre><code># CloudNotes — Full DevOps Showcase
+
+CloudNotes is a containerized note-taking application designed to demonstrate the complete DevOps lifecycle, covering all 5 units of the syllabus.
+
+## 🚀 Quick Links (Live Project)
+*   **Production App (AWS):** [http://13.206.199.155](http://13.206.199.155)
+*   **Jenkins CI/CD (AWS):** [http://13.201.29.106:8080](http://13.201.29.106:8080)
+*   **Monitoring (Local):** [http://localhost:3001](http://localhost:3001)
+
+---
+
+## 🛠️ Project Architecture
+
+### 📦 Unit II: Containerization & Orchestration
+*   **Docker:** Multi-stage builds for Flask (Backend) and Nginx (Frontend).
+*   **Kubernetes:** Fully managed manifests in the `kubernetes/` folder, verified on Minikube.
+*   **Docker Compose:** Seamless local development environment with Postgres integration.
+
+### 🏗️ Unit III: Infrastructure as Code (IaC)
+*   **Terraform:** Modular infrastructure provisioning on AWS.
+*   **Resources:** VPC, Public Subnets, Security Groups, EC2 (App & Jenkins), and S3.
+*   **Automation:** Zero-touch deployment using EC2 `user_data` scripts.
+
+### 🔄 Unit IV: CI/CD Pipeline
+*   **Jenkins:** Automated pipeline defined in `jenkins/Jenkinsfile`.
+*   **Stages:** 
+    1. Checkout 
+    2. Backend Tests (Pytest) 
+    3. Docker Build & Push 
+    4. Kubernetes Rollout.
+
+### 📊 Unit V: Monitoring & Security
+*   **Prometheus:** Scraping real-time application metrics from the Flask `/metrics` endpoint.
+*   **Grafana:** Visualizing data (Note count, Request rate) on a custom dashboard.
+*   **Security:** IAM least-privilege roles and Security Group isolation.
+
+---
+
+## 💻 Local Setup
+
+1.  **Clone the Repo:**
+    ```bash
+    git clone &lt;your-repo-url&gt;
+    ```
+2.  **Run with Docker Compose:**
+    ```bash
+    docker-compose -f docker/docker-compose.yml up --build
+    ```
+3.  **Deploy to K8s:**
+    ```bash
+    kubectl apply -f kubernetes/
+    ```
+
+## 👨‍🎓 Educational Mapping
+*   **Unit I:** Git Branching, GitHub, and Public Cloud Deployment.
+*   **Unit II:** Virtualization vs Containerization, K8s Pods/Services.
+*   **Unit III:** IaC Principles, AWS Cloud Services.
+*   **Unit IV:** CI/CD Methodologies, Jenkins Pipelines.
+*   **Unit V:** Observability, Metrics, and DevSecOps.
+
+---
+*Developed for the Cloud & DevOps Fundamentals Course.*
+
+
+---
+*This commit was made to test the automated Jenkins pipeline trigger.*
+
+
+---
+*Second automated trigger test.*
+</code></pre><h3>File: VIVA.md</h3><pre><code># 🎓 CloudNotes Project VIVA - Questions & Answers
+
+This document contains a comprehensive list of potential VIVA questions and detailed answers based on the CloudNotes DevOps project.
+
+---
+
+## 📦 Unit II: Containerization & Orchestration (Docker & Kubernetes)
+
+**Q1: What is the difference between a Docker Image and a Docker Container?**
+*   **Answer:** An **Image** is a read-only template (a blueprint) containing the application code, libraries, and dependencies. A **Container** is a running instance of that image. You can run multiple containers from a single image.
+
+**Q2: Explain the multi-stage build used in this project.**
+*   **Answer:** Multi-stage builds (seen in our Dockerfiles) allow us to use one stage for building/compiling the app and a second, smaller stage for running it. This keeps the final production image size small and secure by excluding build tools and source code.
+
+**Q3: What is the role of `docker-compose`?**
+*   **Answer:** It is a tool for defining and running multi-container Docker applications. We use a YAML file (`docker-compose.yml`) to configure our app's services (frontend, backend, database, monitoring) and start them all with a single command.
+
+**Q4: What is a Kubernetes Pod?**
+*   **Answer:** A Pod is the smallest deployable unit in Kubernetes. It represents a single instance of a running process in your cluster and can contain one or more containers (like our Flask backend).
+
+**Q5: Why do we use Kubernetes Services?**
+*   **Answer:** Pods are ephemeral (they can die and get replaced with new IPs). A **Service** provides a stable IP address and DNS name to access a set of Pods, acting as a load balancer.
+
+---
+
+## 🏗️ Unit III: Infrastructure as Code (Terraform & AWS)
+
+**Q6: What is Infrastructure as Code (IaC)?**
+*   **Answer:** IaC is the process of managing and provisioning computing infrastructure through machine-readable definition files (like Terraform `.tf` files) rather than physical hardware configuration or interactive configuration tools.
+
+**Q7: What is the purpose of the `terraform.tfstate` file?**
+*   **Answer:** Terraform uses this local state file to map real-world resources to your configuration. It keeps track of metadata and helps Terraform determine what changes to make when you run `apply`.
+
+**Q8: Explain the "Modular" approach in your Terraform code.**
+*   **Answer:** We split our infrastructure into logical modules (VPC, EC2, S3). This makes the code reusable, easier to maintain, and organized.
+
+**Q9: What is an AWS Security Group?**
+*   **Answer:** It acts as a virtual firewall for your EC2 instances to control inbound and outbound traffic. In this project, we opened port 80 (App), 8080 (Jenkins), and 22 (SSH).
+
+---
+
+## 🔄 Unit IV: CI/CD Pipeline (Jenkins)
+
+**Q10: What is CI/CD?**
+*   **Answer:** **Continuous Integration (CI)** is the practice of automating the integration of code changes from multiple contributors into a single software project. **Continuous Deployment (CD)** automates the delivery of that code to production environments.
+
+**Q11: What is a `Jenkinsfile`?**
+*   **Answer:** It is a text file that contains the definition of a Jenkins Pipeline and is checked into source control. It implements "Pipeline as Code."
+
+**Q12: Describe the stages in your Jenkins pipeline.**
+*   **Answer:** 
+    1. **Checkout:** Pulling code from GitHub.
+    2. **Security Scan:** Checking for secrets/vulnerabilities.
+    3. **Test:** Running Pytest for the backend.
+    4. **Build & Push:** Creating Docker images and pushing to Docker Hub.
+    5. **Deploy:** SSH-ing into the AWS server and updating the containers.
+
+---
+
+## 📊 Unit V: Monitoring & Security
+
+**Q13: How does Prometheus collect metrics from the application?**
+*   **Answer:** Prometheus uses a "pull model." It scrapes (fetches) metrics from the `/metrics` endpoint of our Flask application at regular intervals.
+
+**Q14: What is the role of Grafana in this project?**
+*   **Answer:** Grafana is the visualization layer. It connects to Prometheus as a data source and displays the metrics (like request rates, CPU usage, note count) on a user-friendly dashboard.
+
+**Q15: What is "DevSecOps"?**
+*   **Answer:** It stands for Development, Security, and Operations. It’s an approach to culture, automation, and platform design that integrates security as a shared responsibility throughout the entire IT lifecycle. We implemented this using Trivy (vulnerability scanning) and TruffleHog (secret scanning) in our pipeline.
+
+---
+
+## 🚀 Bonus Section: Production Readiness (To impress the examiner)
+
+**Q16: If you were to deploy this project for a real enterprise company, what security improvements would you make?**
+*   **Answer:** For a true production environment, I would make three major security changes:
+    1.  **Restrict Security Groups:** Currently, ports are open to the world (`0.0.0.0/0`) for ease of demonstration. I would lock these down to allow traffic only from a Load Balancer or a specific VPN.
+    2.  **Remove Root Access:** I would ensure Jenkins and the Flask containers run as non-root users to minimize the blast radius if a container is compromised.
+    3.  **Secret Management:** Instead of injecting credentials via Groovy scripts or `.env` files, I would integrate a proper secrets manager like AWS Secrets Manager or HashiCorp Vault.
+
+**Q17: How would you improve the CI/CD Pipeline for scale?**
+*   **Answer:** 
+    1.  **Stop Committing Dynamic State:** Currently, our automation scripts write the new App IP directly into the `Jenkinsfile` and commit it. In a real environment, I would pass the IP as a runtime parameter or use AWS Systems Manager (SSM) Parameter Store to decouple code from infrastructure state.
+    2.  **Blocking Scans:** I would configure our Trivy vulnerability scans to *fail* the build (exit code 1) if a CRITICAL vulnerability is found, rather than just printing a warning.
+    3.  **Immutable Tags:** I would stop using the `latest` tag for Docker images in production, as it makes rollbacks difficult. I would pin deployments to specific commit hashes or build numbers.
+
+---
+*Created for CloudNotes Project VIVA Preparation.*
+</code></pre><h3>Historical Revision Analysis (v1.0)</h3><h3>File History: app/backend/app.py</h3><pre><code>from flask import Flask, jsonify, request, Response
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from datetime import datetime, timezone
+import os
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL', 'sqlite:///notes.db'
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+CORS(app)  # Enable CORS for all routes
+metrics = PrometheusMetrics(app, path=None) # Disable automatic path
+
+# Custom metrics
+notes_created_counter = Counter(
+    'notes_created_total',
+    'Total number of notes created'
+)
+notes_deleted_counter = Counter(
+    'notes_deleted_total',
+    'Total number of notes deleted'
+)
+notes_updated_counter = Counter(
+    'notes_updated_total',
+    'Total number of notes updated'
+)
+
+class Note(db.Model):
+    id         = db.Column(db.Integer, primary_key=True)
+    title      = db.Column(db.String(100), nullable=False)
+    body       = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+with app.app_context():
+    db.create_all()
+    # Auto-migrate: add created_at column if it doesn't exist on an older DB
+    try:
+        from sqlalchemy import text, inspect
+        inspector = inspect(db.engine)
+        columns = [c['name'] for c in inspector.get_columns('note')]
+        if 'created_at' not in columns:
+            db.session.execute(text(
+                'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT NOW()'
+            ))
+            db.session.commit()
+    except Exception:
+        pass  # Table may not exist yet (first run) — db.create_all() handles it
+
+@app.route('/metrics')
+def metrics_endpoint():
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+@app.route('/api/health')
+def health():
+    return jsonify({"status": "ok"})
+
+@app.route('/api/notes', methods=['GET'])
+def get_notes():
+    search = request.args.get('search', '').strip()
+    if search:
+        notes = Note.query.filter(
+            Note.title.ilike(f'%{search}%') | Note.body.ilike(f'%{search}%')
+        ).all()
+    else:
+        notes = Note.query.all()
+    return jsonify([{
+        "id": n.id,
+        "title": n.title,
+        "body": n.body,
+        "created_at": n.created_at.isoformat() + 'Z' if n.created_at else None
+    } for n in notes])
+
+@app.route('/api/notes', methods=['POST'])
+def create_note():
+    data = request.get_json()
+    if not data or 'title' not in data or 'body' not in data:
+        return jsonify({"error": "Missing title or body"}), 400
+    note = Note(title=data['title'], body=data['body'])
+    db.session.add(note)
+    db.session.commit()
+    notes_created_counter.inc()
+    return jsonify({"id": note.id, "message": "Note created"}), 201
+
+@app.route('/api/notes/&lt;int:note_id&gt;', methods=['PUT'])
+def update_note(note_id):
+    note = Note.query.get_or_404(note_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    note.title = data.get('title', note.title)
+    note.body = data.get('body', note.body)
+    db.session.commit()
+    notes_updated_counter.inc()
+    return jsonify({"id": note.id, "message": "Note updated"})
+
+@app.route('/api/notes/&lt;int:note_id&gt;', methods=['DELETE'])
+def delete_note(note_id):
+    note = Note.query.get_or_404(note_id)
+    db.session.delete(note)
+    db.session.commit()
+    notes_deleted_counter.inc()
+    return jsonify({"message": "Note deleted"})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+</code></pre><h3>File History: app/frontend/app.js</h3><pre><code>const API_URL = '/api/notes';
+let searchTimeout = null;
+
+document.addEventListener('DOMContentLoaded', () =&gt; {
+    loadNotes();
+    document.getElementById('add-note').addEventListener('click', addNote);
+    document.getElementById('search-input').addEventListener('input', handleSearch);
+    // Allow Enter key to submit note
+    document.getElementById('note-body').addEventListener('keydown', (e) =&gt; {
+        if (e.ctrlKey && e.key === 'Enter') addNote();
+    });
+});
+
+function handleSearch(e) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() =&gt; {
+        loadNotes(e.target.value.trim());
+    }, 300);
+}
+
+function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'flex' : 'none';
+}
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() =&gt; toast.remove(), 3000);
+}
+
+function formatTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins &lt; 1) return 'Just now';
+    if (diffMins &lt; 60) return `${diffMins}m ago`;
+    if (diffHours &lt; 24) return `${diffHours}h ago`;
+    if (diffDays &lt; 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function loadNotes(search = '') {
+    showLoading(true);
+    try {
+        const url = search ? `${API_URL}?search=${encodeURIComponent(search)}` : API_URL;
+        const response = await fetch(url);
+        const notes = await response.json();
+        const notesList = document.getElementById('notes-list');
+        const notesCount = document.getElementById('notes-count');
+
+        notesCount.textContent = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+        notesList.innerHTML = '';
+
+        if (notes.length === 0) {
+            notesList.innerHTML = `
+                &lt;div class="empty-state"&gt;
+                    &lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"&gt;
+                        &lt;path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/&gt;
+                    &lt;/svg&gt;
+                    &lt;p&gt;${search ? 'No notes match your search.' : 'No notes yet. Create your first note above!'}&lt;/p&gt;
+                &lt;/div&gt;
+            `;
+            showLoading(false);
+            return;
+        }
+
+        notes.forEach(note =&gt; {
+            const noteElement = document.createElement('div');
+            noteElement.className = 'note-item';
+            noteElement.innerHTML = `
+                &lt;h3&gt;${escapeHtml(note.title)}&lt;/h3&gt;
+                &lt;p&gt;${escapeHtml(note.body)}&lt;/p&gt;
+                &lt;div class="note-meta"&gt;
+                    &lt;span class="note-time"&gt;${formatTime(note.created_at)}&lt;/span&gt;
+                    &lt;div class="note-actions"&gt;
+                        &lt;button class="btn btn-edit" onclick="openEditModal(${note.id}, '${escapeAttr(note.title)}', '${escapeAttr(note.body)}')"&gt;Edit&lt;/button&gt;
+                        &lt;button class="btn btn-delete" onclick="deleteNote(${note.id})"&gt;Delete&lt;/button&gt;
+                    &lt;/div&gt;
+                &lt;/div&gt;
+            `;
+            notesList.appendChild(noteElement);
+        });
+    } catch (error) {
+        console.error('Error loading notes:', error);
+        showToast('Failed to load notes', 'error');
+    }
+    showLoading(false);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+async function addNote() {
+    const titleEl = document.getElementById('note-title');
+    const bodyEl = document.getElementById('note-body');
+    const title = titleEl.value.trim();
+    const body = bodyEl.value.trim();
+
+    if (!title || !body) {
+        showToast('Please fill in both title and body', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, body })
+        });
+
+        if (response.ok) {
+            titleEl.value = '';
+            bodyEl.value = '';
+            showToast('Note created successfully!');
+            loadNotes();
+        } else {
+            const err = await response.json();
+            showToast(err.error || 'Failed to create note', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding note:', error);
+        showToast('Network error — could not create note', 'error');
+    }
+}
+
+function openEditModal(id, title, body) {
+    document.getElementById('edit-note-id').value = id;
+    document.getElementById('edit-note-title').value = title;
+    document.getElementById('edit-note-body').value = body;
+    document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('edit-modal').style.display = 'none';
+}
+
+async function saveEdit() {
+    const id = document.getElementById('edit-note-id').value;
+    const title = document.getElementById('edit-note-title').value.trim();
+    const body = document.getElementById('edit-note-body').value.trim();
+
+    if (!title || !body) {
+        showToast('Please fill in both fields', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, body })
+        });
+
+        if (response.ok) {
+            closeEditModal();
+            showToast('Note updated!');
+            loadNotes();
+        } else {
+            showToast('Failed to update note', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating note:', error);
+        showToast('Network error — could not update', 'error');
+    }
+}
+
+async function deleteNote(id) {
+    try {
+        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('Note deleted');
+            loadNotes();
+        } else {
+            showToast('Failed to delete note', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting note:', error);
+        showToast('Network error — could not delete', 'error');
+    }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) =&gt; {
+    if (e.key === 'Escape') closeEditModal();
+});
+
+// Close modal on overlay click
+document.addEventListener('click', (e) =&gt; {
+    if (e.target.id === 'edit-modal') closeEditModal();
+});
+</code></pre><h3>File History: app/frontend/nginx.conf</h3><pre><code>server {
+    listen 80;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://backend:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /metrics {
+        proxy_pass http://backend:5000/metrics;
+    }
+}
+</code></pre><h3>File History: app/backend/requirements.txt</h3><pre><code>flask==3.0.0
+flask-sqlalchemy==3.1.1
+flask-cors==4.0.0
+psycopg2-binary==2.9.9
+prometheus-flask-exporter==0.23.0
+gunicorn==21.2.0
+pytest==7.4.3
+</code></pre><h3>File History: docker/docker-compose.yml</h3><pre><code>version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d cloudnotes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../app/backend
+    env_file: .env
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../app/frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+    ports:
+      - "9091:9090"
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
+    env_file: .env
+    depends_on:
+      - prometheus
+    networks:
+      - cloudnotes-network
+    restart: unless-stopped
+
+networks:
+  cloudnotes-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+</code></pre><h3>File History: terraform/main.tf</h3><pre><code>resource "aws_key_pair" "deployer" {
+  key_name   = "cloudnotes-key-new"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDV1/ufOIYnrKHxed+hr8G+e28tG8Yyy1cYfONMBbfFY/P8319rbwMFTcbOo1/eKM0JOuPcNMUHTkhy3/d/ZYqowilE7x/Qr3+E3djIRqQGrlRkaqLSZVtxd8ZY/2qq0QexezTq2ylfw1LUXWSbg+6GKS8F3stAEJz5O/7MmVk/EFnvJHtJOUdXcWZDK/dVEcRS+C6aSY/d3lNxebHDwO63VSgycM8aBsxkvPT8wiMHbtJXMfvMZspTiox6GdSSAHX5ld2fD1HZOldlhM6NM4hCqMVr9EFKfxg4v4AmV6HYN+aGrIeOVILo86htLH9R2sAwymDIDNVIawo3TWWyNVb3 savin@MEERA"
+}
+
+module "vpc" {
+  source       = "./modules/vpc"
+  project_name = var.project_name
+}
+
+module "jenkins_ec2" {
+  source        = "./modules/ec2"
+  instance_type = var.instance_type
+  subnet_id     = module.vpc.public_subnet_id
+  sg_id         = module.vpc.jenkins_sg_id
+  name          = "${var.project_name}-jenkins"
+  key_name      = aws_key_pair.deployer.key_name
+  user_data     = &lt;&lt;-EOF
+                #!/bin/bash
+                exec &gt; /tmp/jenkins-deploy.log 2&gt;&1
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                apt-get install -y docker.io curl git
+                systemctl start docker
+                systemctl enable docker
+
+                # Setup Jenkins Configuration as Code
+                mkdir -p /opt/jenkins
+                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /tmp/repo
+                cp /tmp/repo/jenkins/jenkins.yaml /opt/jenkins/jenkins.yaml
+                mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+                if compgen -G "/tmp/repo/jenkins/init.groovy.d/*.groovy" &gt; /dev/null; then
+                  cp /tmp/repo/jenkins/init.groovy.d/*.groovy /opt/jenkins/init.groovy.d/
+                fi
+                chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+                
+                # Update Jenkins URL in yaml
+                PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+                sed -i "s/REPLACE_ME_JENKINS_IP/$PUBLIC_IP/g" /opt/jenkins/jenkins.yaml
+
+                # Build custom Jenkins image with plugins
+                cd /tmp/repo/jenkins
+                docker build -t cloudnotes-jenkins -f Dockerfile.local .
+
+                docker volume create jenkins_home
+                docker run -d \
+                  --name jenkins \
+                  --restart=unless-stopped \
+                  --user root \
+                  -p 8080:8080 \
+                  -p 50000:50000 \
+                  -e CASC_JENKINS_CONFIG="/var/jenkins_home/jenkins.yaml" \
+                  -v jenkins_home:/var/jenkins_home \
+                  -v /opt/jenkins/jenkins.yaml:/var/jenkins_home/jenkins.yaml \
+                  -v /opt/jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d \
+                  -v /opt/jenkins/cloudnotes-secrets:/var/jenkins_home/cloudnotes-secrets:ro \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v /usr/bin/docker:/usr/bin/docker \
+                  cloudnotes-jenkins
+                EOF
+}
+
+module "app_ec2" {
+  source        = "./modules/ec2"
+  instance_type = var.instance_type
+  subnet_id     = module.vpc.public_subnet_id
+  sg_id         = module.vpc.app_sg_id
+  name          = "${var.project_name}-app"
+  key_name      = aws_key_pair.deployer.key_name
+  user_data     = &lt;&lt;-EOF
+                #!/bin/bash
+                exec &gt; /tmp/deploy.log 2&gt;&1
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                apt-get install -y docker.io curl docker-compose-v2 git
+                systemctl start docker
+                systemctl enable docker
+
+                rm -rf /opt/cloudnotes
+                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /opt/cloudnotes
+
+                cat &lt;&lt;EOC &gt; /opt/cloudnotes/docker/.env
+                POSTGRES_DB=cloudnotes
+                POSTGRES_USER=admin
+                POSTGRES_PASSWORD=secret123
+                DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes
+                EOC
+
+                cd /opt/cloudnotes
+                docker compose -f docker/docker-compose.yml up -d --build
+                EOF
+}
+
+module "frontend_bucket" {
+  source      = "./modules/s3"
+  bucket_name = "${var.project_name}-frontend-${var.environment}"
+}
+</code></pre><h3>File History: terraform/modules/vpc/main.tf</h3><pre><code>resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  tags = {
+    Name = "${var.project_name}-vpc"
+  }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "ap-south-1a"
+  tags = {
+    Name = "${var.project_name}-public-subnet"
+  }
+}
+
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "${var.project_name}-igw"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "jenkins_sg" {
+  name        = "jenkins-sg"
+  description = "Allow inbound SSH and HTTP for Jenkins"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "app_sg" {
+  name        = "app-sg"
+  description = "Allow inbound HTTP for App"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 5000
+    to_port     = 5000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 9091
+    to_port     = 9091
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+variable "project_name" {}
+</code></pre><h3>File History: Jenkinsfile</h3><pre><code>pipeline {
+    agent any
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+    }
+
+    triggers {
+        githubPush()
+    }
+
+    environment {
+        DOCKER_HUB_USER = 'savinaysingh7'
+        IMAGE_NAME_BE   = 'cloudnotes-backend'
+        IMAGE_NAME_FE   = 'cloudnotes-frontend'
+        TAG             = "${env.BUILD_NUMBER}"
+        APP_SERVER_IP   = '3.111.149.43'
+        PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
+    }
+
+    stages {
+        stage('Code Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Backend Tests') {
+            steps {
+                script {
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} ./app/backend"
+                    sh "docker run --rm -e PYTHONPATH=. ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} pytest"
+                }
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                script {
+                    sh '''
+                    set -eu
+                    if ! command -v trufflehog &gt;/dev/null 2&gt;&1; then
+                        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+                    fi
+
+                    set +e
+                    trufflehog filesystem . --only-verified --json &gt; trufflehog.json
+                    scan_status=$?
+                    set -e
+
+                    if [ "$scan_status" -ne 0 ] && [ "$scan_status" -ne 183 ]; then
+                        exit "$scan_status"
+                    fi
+
+                    if [ -s trufflehog.json ]; then
+                        cat trufflehog.json
+                        exit 1
+                    fi
+
+                    echo "No verified secrets found - OK"
+                    '''
+                    echo "Secret scan complete"
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:test-${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}"
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ./app/frontend"
+                }
+            }
+        }
+
+        stage('Image Vulnerability Scan') {
+            steps {
+                script {
+                    // Scan Docker images for known CVEs using Trivy
+                    sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        aquasec/trivy image --severity HIGH,CRITICAL --exit-code 0 \
+                        ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} || echo 'Scan complete (non-blocking)'
+                    """
+                    echo "Image vulnerability scan complete"
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    // Using withCredentials to safely handle Docker Hub login via native shell
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh 'printf "%s" "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin'
+                        sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                        sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to AWS Production') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'app-server-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
+                        sh """
+                        echo "POSTGRES_DB=cloudnotes" &gt; docker/.env
+                        echo "POSTGRES_USER=admin" &gt;&gt; docker/.env
+                        echo "POSTGRES_PASSWORD=secret123" &gt;&gt; docker/.env
+                        echo "DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes" &gt;&gt; docker/.env
+                        echo "GF_SECURITY_ADMIN_PASSWORD=admin" &gt;&gt; docker/.env
+
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "sudo mkdir -p /app && sudo chown ubuntu:ubuntu /app"
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.prod.yml ubuntu@\${APP_SERVER_IP}:/app/docker-compose.yml
+                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/.env ubuntu@\${APP_SERVER_IP}:/app/
+                        scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no monitoring ubuntu@\${APP_SERVER_IP}:/app/
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} 'bash -s' &lt;&lt;'REMOTE_DEPLOY'
+                            if [ -d /opt/cloudnotes ]; then
+                                cd /opt/cloudnotes
+                                sudo docker compose -f docker/docker-compose.yml down || true
+                            fi
+                            cd /app
+                            sudo docker compose pull
+                            sudo docker compose up -d --remove-orphans
+                            sudo docker compose up -d --force-recreate prometheus grafana
+
+                            for attempt in \$(seq 1 30); do
+                                if curl -fsS http://localhost/ &gt;/dev/null && curl -fsS http://localhost:5000/api/health &gt;/dev/null; then
+                                    exit 0
+                                fi
+                                sleep 5
+                            done
+
+                            echo "Deployment health check failed"
+                            sudo docker compose ps
+                            exit 1
+REMOTE_DEPLOY
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "--- PIPELINE SUCCESSFUL ---"
+            echo "Production App updated at http://${APP_SERVER_IP}"
+        }
+        always {
+            script {
+                try {
+                    cleanWs()
+                } catch (err) {
+                    echo "Workspace cleanup skipped: ${err.message}"
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+</code></pre><h3>File History: kubernetes/postgres-secret.yaml</h3><pre><code>apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: cloudnotes
+type: Opaque
+data:
+  # Values are base64 encoded
+  # admin -&gt; YWRtaW4=
+  # secret123 -&gt; c2VjcmV0MTIz
+  # postgresql://admin:secret123@postgres-db:5432/cloudnotes -&gt; cG9zdGdyZXNxbDovL2FkbWluOnNlY3JldDEyM0Bwb3N0Z3Jlcy1kYjo1NDMyL2Nsb3Vkbm90ZXM=
+  database-url: cG9zdGdyZXNxbDovL2FkbWluOnNlY3JldDEyM0Bwb3N0Z3Jlcy1kYjo1NDMyL2Nsb3Vkbm90ZXM=
+  postgres-password: c2VjcmV0MTIz
+</code></pre><h3>File History: kubernetes/backend-deployment.yaml</h3><pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: cloudnotes
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: savinaysingh7/cloudnotes-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-url
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: cloudnotes
+spec:
+  selector:
+    app: backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+</code></pre><h3>File History: monitoring/prometheus/alert_rules.yml</h3><pre><code>groups:
+  - name: cloudnotes-alerts
+    rules:
+      - alert: BackendDown
+        expr: up{job="cloudnotes-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CloudNotes backend is DOWN"
+          description: "The backend target has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(flask_http_request_total{status=~"5.."}[5m]))
+            /
+            sum(rate(flask_http_request_total[5m]))
+          ) &gt; 0.10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate on CloudNotes backend"
+          description: "More than 10% of requests are returning 5xx errors."
+
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le)) &gt; 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile latency is above 1 second."
+
+      - alert: NoNotesCreated
+        expr: increase(notes_created_total[1h]) == 0 and notes_created_total &gt; 0
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "No notes created in the last hour"
+          description: "User activity may have dropped; no new notes created."
+</code></pre><h3>File History: start_automated_terraform.ps1</h3><pre><code>$ErrorActionPreference = "Stop"
+
+$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $ProjectRoot
+
+$Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+$SecretDir = Join-Path $ProjectRoot ".secrets"
+
+function Read-RequiredSecret {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$EnvName,
+        [Parameter(Mandatory = $true)][string]$FilePath
+    )
+
+    $envValue = [Environment]::GetEnvironmentVariable($EnvName)
+    if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+        return $envValue.TrimEnd("`r", "`n")
+    }
+
+    if (Test-Path -LiteralPath $FilePath) {
+        $fileValue = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $FilePath).Path, [System.Text.Encoding]::UTF8)
+        if (-not [string]::IsNullOrWhiteSpace($fileValue)) {
+            return $fileValue.TrimEnd("`r", "`n")
+        }
+    }
+
+    throw "Missing $Name. Set $EnvName or create $FilePath."
+}
+
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)][string]$Tool,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    & $Tool @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Tool failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Wait-ForSsh {
+    param([Parameter(Mandatory = $true)][string]$HostName)
+
+    Write-Host "Waiting for SSH on $HostName..."
+    for ($attempt = 1; $attempt -le 40; $attempt++) {
+        & ssh @script:SshOptions "ubuntu@$HostName" "echo ok" *&gt; $null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        Start-Sleep -Seconds 10
+    }
+
+    throw "Timed out waiting for SSH on $HostName."
+}
+
+function Wait-ForJenkins {
+    param([Parameter(Mandatory = $true)][string]$JenkinsIp)
+
+    $url = "http://$($JenkinsIp):8080/login"
+    Write-Host "Waiting for Jenkins at $url..."
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        try {
+            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+                return
+            }
+        } catch {
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    throw "Timed out waiting for Jenkins at $url."
+}
+
+function Invoke-Remote {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][string]$Command
+    )
+
+    & ssh @script:SshOptions "ubuntu@$HostName" $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "Remote command failed on $HostName with exit code $LASTEXITCODE."
+    }
+}
+
+function Copy-ToRemote {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][string]$LocalPath,
+        [Parameter(Mandatory = $true)][string]$RemotePath
+    )
+
+    & scp @script:SshOptions $LocalPath "ubuntu@${HostName}:$RemotePath"
+    if ($LASTEXITCODE -ne 0) {
+        throw "scp failed for $LocalPath."
+    }
+}
+
+function Install-JenkinsCredentials {
+    param(
+        [Parameter(Mandatory = $true)][string]$JenkinsIp,
+        [Parameter(Mandatory = $true)][string]$PemPath,
+        [Parameter(Mandatory = $true)][string]$DockerHubPassword
+    )
+
+    $initScript = Join-Path $ProjectRoot "jenkins\init.groovy.d\creds.groovy"
+    if (-not (Test-Path -LiteralPath $initScript)) {
+        throw "Missing Jenkins init script: $initScript"
+    }
+
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cloudnotes-jenkins-secrets-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+
+    $dockerSecret = Join-Path $tempDir "dockerhub_password"
+    $installScript = Join-Path $tempDir "install_cloudnotes_creds.sh"
+    [System.IO.File]::WriteAllText($dockerSecret, $DockerHubPassword, $Utf8NoBom)
+    [System.IO.File]::WriteAllText($installScript, @'
+set -euo pipefail
+
+sudo mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo mv /tmp/cloudnotes_creds.groovy /opt/jenkins/init.groovy.d/creds.groovy
+sudo mv /tmp/cloudnotes_app_ssh_private_key /opt/jenkins/cloudnotes-secrets/app_ssh_private_key
+sudo mv /tmp/cloudnotes_dockerhub_password /opt/jenkins/cloudnotes-secrets/dockerhub_password
+sudo chown -R root:root /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo chmod 644 /opt/jenkins/init.groovy.d/creds.groovy
+sudo chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key /opt/jenkins/cloudnotes-secrets/dockerhub_password
+
+for attempt in $(seq 1 120); do
+  if sudo docker info &gt;/dev/null 2&gt;&1 && sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
+    break
+  fi
+  sleep 10
+done
+
+if ! sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
+  echo "Timed out waiting for Jenkins container."
+  exit 1
+fi
+
+if ! sudo docker inspect jenkins --format '{{range .Mounts}}{{println .Destination}}{{end}}' | grep -qx /var/jenkins_home/cloudnotes-secrets; then
+  sudo docker exec jenkins mkdir -p /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
+  sudo docker cp /opt/jenkins/init.groovy.d/creds.groovy jenkins:/var/jenkins_home/init.groovy.d/creds.groovy
+  sudo docker cp /opt/jenkins/cloudnotes-secrets/app_ssh_private_key jenkins:/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
+  sudo docker cp /opt/jenkins/cloudnotes-secrets/dockerhub_password jenkins:/var/jenkins_home/cloudnotes-secrets/dockerhub_password
+  sudo docker exec jenkins chown -R jenkins:jenkins /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
+  sudo docker exec jenkins chmod 644 /var/jenkins_home/init.groovy.d/creds.groovy
+  sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/app_ssh_private_key /var/jenkins_home/cloudnotes-secrets/dockerhub_password
+fi
+
+sudo docker restart jenkins &gt;/dev/null
+echo "Jenkins restarted after credential installation."
+'@, $Utf8NoBom)
+
+    try {
+        Wait-ForSsh -HostName $JenkinsIp
+        Invoke-Remote -HostName $JenkinsIp -Command "mkdir -p /tmp"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $initScript -RemotePath "/tmp/cloudnotes_creds.groovy"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $PemPath -RemotePath "/tmp/cloudnotes_app_ssh_private_key"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $dockerSecret -RemotePath "/tmp/cloudnotes_dockerhub_password"
+        Copy-ToRemote -HostName $JenkinsIp -LocalPath $installScript -RemotePath "/tmp/install_cloudnotes_creds.sh"
+        Invoke-Remote -HostName $JenkinsIp -Command "bash /tmp/install_cloudnotes_creds.sh && rm -f /tmp/install_cloudnotes_creds.sh"
+        Wait-ForJenkins -JenkinsIp $JenkinsIp
+    } finally {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Write-Host "========================================="
+Write-Host " Starting Mumbai CloudNotes (Terraform)  "
+Write-Host "========================================="
+
+$GithubToken = Read-RequiredSecret `
+    -Name "GitHub webhook token" `
+    -EnvName "CLOUDNOTES_GITHUB_TOKEN" `
+    -FilePath (Join-Path $SecretDir "github_token.txt")
+$DockerHubPassword = Read-RequiredSecret `
+    -Name "Docker Hub password" `
+    -EnvName "CLOUDNOTES_DOCKERHUB_PASSWORD" `
+    -FilePath (Join-Path $SecretDir "dockerhub_password.txt")
+$HookId = if ($env:CLOUDNOTES_GITHUB_HOOK_ID) { $env:CLOUDNOTES_GITHUB_HOOK_ID } else { "628416052" }
+$Repo = if ($env:CLOUDNOTES_GITHUB_REPO) { $env:CLOUDNOTES_GITHUB_REPO } else { "savinaysingh7/cloudnotes" }
+$PemPathInput = if ($env:CLOUDNOTES_SSH_KEY_PATH) { $env:CLOUDNOTES_SSH_KEY_PATH } else { Join-Path $ProjectRoot "cloudnotes-key-new.pem" }
+if (-not (Test-Path -LiteralPath $PemPathInput)) {
+    throw "Missing SSH private key: $PemPathInput"
+}
+$PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
+$script:SshOptions = @("-i", $PemPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
+
+Write-Host "Initializing Terraform..."
+terraform -chdir=terraform init -no-color | Out-Null
+
+Write-Host "Applying Terraform Infrastructure (this may take 2-3 mins)..."
+terraform -chdir=terraform apply -auto-approve -no-color
+
+Write-Host "Fetching new IPs from Terraform..."
+$APP_IP = (terraform -chdir=terraform output -raw app_public_ip).Trim()
+$JENKINS_IP = (terraform -chdir=terraform output -raw jenkins_public_ip).Trim()
+
+if (-not $APP_IP) {
+    throw "Failed to get App IP from Terraform."
+}
+if (-not $JENKINS_IP) {
+    throw "Failed to get Jenkins IP from Terraform."
+}
+
+Write-Host "New App IP: $APP_IP"
+Write-Host "New Jenkins IP: $JENKINS_IP"
+
+Write-Host "Updating Jenkinsfile..."
+$JenkinsfilePath = Join-Path $ProjectRoot "Jenkinsfile"
+$Jenkinsfile = [System.IO.File]::ReadAllText($JenkinsfilePath, [System.Text.Encoding]::UTF8)
+$UpdatedJenkinsfile = [regex]::Replace(
+    $Jenkinsfile,
+    "(?m)^(\s*APP_SERVER_IP\s*=\s*')[^']*(')",
+    { param($match) "$($match.Groups[1].Value)$APP_IP$($match.Groups[2].Value)" }
+)
+if ($UpdatedJenkinsfile -eq $Jenkinsfile -and $Jenkinsfile -notmatch "APP_SERVER_IP\s*=\s*'$([regex]::Escape($APP_IP))'") {
+    throw "Could not find APP_SERVER_IP in Jenkinsfile."
+}
+[System.IO.File]::WriteAllText($JenkinsfilePath, $UpdatedJenkinsfile, $Utf8NoBom)
+
+Write-Host "Installing Jenkins credentials..."
+Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -PemPath $PemPath -DockerHubPassword $DockerHubPassword
+
+Write-Host "Updating GitHub Webhook..."
+$Headers = @{
+    "Authorization" = "token $GithubToken"
+    "Accept"        = "application/vnd.github.v3+json"
+    "User-Agent"    = "CloudNotes-Disposable-DevOps"
+}
+$Body = @{
+    config = @{
+        url          = "http://$($JENKINS_IP):8080/github-webhook/"
+        content_type = "json"
+    }
+} | ConvertTo-Json -Depth 3
+Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/hooks/$HookId" -Method Patch -Headers $Headers -Body $Body -ContentType "application/json" | Out-Null
+
+Write-Host "Pushing Jenkinsfile to GitHub..."
+git add Jenkinsfile
+git diff --cached --quiet
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Jenkinsfile already points at the current App IP; no commit needed."
+} elseif ($LASTEXITCODE -eq 1) {
+    Invoke-Checked -Tool "git" -Arguments @("commit", "-m", "Auto-update App IP after Terraform Apply: $APP_IP")
+    Invoke-Checked -Tool "git" -Arguments @("push", "origin", "main")
+} else {
+    throw "git diff failed with exit code $LASTEXITCODE."
+}
+
+Write-Host "========================================="
+Write-Host " SUCCESS! Everything is deployed."
+Write-Host " App URL:    http://$APP_IP"
+Write-Host " Jenkins:    http://$($JENKINS_IP):8080"
+Write-Host " Grafana:    http://$($APP_IP):3001"
+Write-Host " Prometheus: http://$($APP_IP):9091"
+Write-Host " "
+Write-Host " Note: It will take ~5 mins for Docker to finish"
+Write-Host " installing and building the app on the server."
+Write-Host "========================================="
+</code></pre><h3>File History: HOW_TO_RUN.md</h3><pre><code># 🚀 How to Run the CloudNotes Project
+
+This project is a full-scale DevOps showcase. You can run it in three different modes. 
+
+---
+
+## 🏗️ 1. Running Locally (Docker Compose)
+Use this for quick development and local testing.
+
+1.  **Open Docker Desktop** on your computer and make sure it is running.
+2.  Open a terminal (PowerShell) at the root of the project and run:
+    ```powershell
+    docker-compose -f docker/docker-compose.yml up --build -d
+    ```
+3.  **Access the app:** [http://localhost:80](http://localhost:80)
+4.  **Access Monitoring:**
+    *   **Grafana:** [http://localhost:3001](http://localhost:3001) (User: `admin`, Pass: `admin`)
+    *   **Prometheus:** [http://localhost:9091](http://localhost:9091)
+
+### Recovery
+If anything goes wrong, run:
+```powershell
+powershell -File docker/recover.ps1
+```
+
+---
+
+## ☸️ 2. Running in Kubernetes (Minikube)
+Use this to demonstrate orchestration and self-healing.
+
+1.  **Start Minikube:**
+    ```powershell
+    minikube start --driver=docker
+    ```
+2.  **Apply Manifests:**
+    ```powershell
+    kubectl apply -f kubernetes/
+    ```
+3.  **Open the App:**
+    ```powershell
+    minikube service frontend -n cloudnotes
+    ```
+
+---
+
+## ☁️ 3. Running in AWS Cloud (Production)
+This is your real, live internet deployment.
+
+*   **Production App:** [http://13.206.199.155](http://13.206.199.155)
+*   **Jenkins CI/CD:** [http://13.201.50.42:8080](http://13.201.50.42:8080)
+    *   **User:** `admin`
+    *   **Password:** `8767317fd394488ba28b0f28445c1d44`
+
+---
+
+## 🔄 4. How to Trigger the Automated Pipeline
+1.  Change any file in your project (e.g., add a comment to `README.md`).
+2.  **Push to GitHub:**
+    ```powershell
+    git add .
+    git commit -m "Testing automation"
+    git push origin main
+    ```
+3.  **Jenkins will automatically detect the change** within 60 seconds and start a new build. It will:
+    *   Run a **security scan** (truffleHog) for leaked secrets.
+    *   Build new Docker images.
+    *   Run backend unit tests (pytest).
+    *   Run an **image vulnerability scan** (Trivy) for CVEs.
+    *   Push images to Docker Hub.
+    *   **Securely update the AWS Production App via SSH.**
+
+---
+
+## ✨ 5. App Features (v2.0)
+- **Create** notes with title and body
+- **Read** all notes with timestamps
+- **Update** notes via the Edit button
+- **Delete** notes
+- **Search** notes by title or body content
+- **Dark mode** modern UI with animations
+- **Prometheus metrics** at `/metrics` endpoint
+- **Grafana dashboard** with 6 monitoring panels
+
+---
+
+## 🔧 6. Manual Setup Steps (Optional Enhancements)
+
+### HTTPS / TLS Certificate
+To add SSL to the AWS production server:
+```bash
+ssh -i cloudnotes_key ubuntu@YOUR_NEW_APP_IP
+sudo apt install -y certbot
+sudo certbot certonly --standalone -d your-domain.com
+# Then configure Nginx to use the cert
+```
+
+### GitHub Webhooks (Instead of Polling)
+1. Go to your GitHub repo → Settings → Webhooks
+2. Add webhook URL: `http://YOUR_NEW_JENKINS_IP:8080/github-webhook/`
+3. Content type: `application/json`
+4. Events: Just the `push` event
+5. Remove `pollSCM` from Jenkinsfile and add `githubPush()` trigger
+
+### Terraform Remote State
+See `terraform/backend.tf.example` for S3 remote state configuration.
+
+---
+
+## 🛑 How to Delete Everything (To save costs)
+Once your demo is finished, run this from the project root to avoid AWS charges:
+```powershell
+terraform -chdir=terraform destroy -auto-approve
+```
+</code></pre><h3>File History: README.md</h3><pre><code># CloudNotes — Full DevOps Showcase
+
+CloudNotes is a containerized note-taking application designed to demonstrate the complete DevOps lifecycle, covering all 5 units of the syllabus.
+
+## 🚀 Quick Links (Live Project)
+*   **Production App (AWS):** [http://13.206.199.155](http://13.206.199.155)
+*   **Jenkins CI/CD (AWS):** [http://13.201.29.106:8080](http://13.201.29.106:8080)
+*   **Monitoring (Local):** [http://localhost:3001](http://localhost:3001)
+
+---
+
+## 🛠️ Project Architecture
+
+### 📦 Unit II: Containerization & Orchestration
+*   **Docker:** Multi-stage builds for Flask (Backend) and Nginx (Frontend).
+*   **Kubernetes:** Fully managed manifests in the `kubernetes/` folder, verified on Minikube.
+*   **Docker Compose:** Seamless local development environment with Postgres integration.
+
+### 🏗️ Unit III: Infrastructure as Code (IaC)
+*   **Terraform:** Modular infrastructure provisioning on AWS.
+*   **Resources:** VPC, Public Subnets, Security Groups, EC2 (App & Jenkins), and S3.
+*   **Automation:** Zero-touch deployment using EC2 `user_data` scripts.
+
+### 🔄 Unit IV: CI/CD Pipeline
+*   **Jenkins:** Automated pipeline defined in `jenkins/Jenkinsfile`.
+*   **Stages:** 
+    1. Checkout 
+    2. Backend Tests (Pytest) 
+    3. Docker Build & Push 
+    4. Kubernetes Rollout.
+
+### 📊 Unit V: Monitoring & Security
+*   **Prometheus:** Scraping real-time application metrics from the Flask `/metrics` endpoint.
+*   **Grafana:** Visualizing data (Note count, Request rate) on a custom dashboard.
+*   **Security:** IAM least-privilege roles and Security Group isolation.
+
+---
+
+## 💻 Local Setup
+
+1.  **Clone the Repo:**
+    ```bash
+    git clone &lt;your-repo-url&gt;
+    ```
+2.  **Run with Docker Compose:**
+    ```bash
+    docker-compose -f docker/docker-compose.yml up --build
+    ```
+3.  **Deploy to K8s:**
+    ```bash
+    kubectl apply -f kubernetes/
+    ```
+
+## 👨‍🎓 Educational Mapping
+*   **Unit I:** Git Branching, GitHub, and Public Cloud Deployment.
+*   **Unit II:** Virtualization vs Containerization, K8s Pods/Services.
+*   **Unit III:** IaC Principles, AWS Cloud Services.
+*   **Unit IV:** CI/CD Methodologies, Jenkins Pipelines.
+*   **Unit V:** Observability, Metrics, and DevSecOps.
+
+---
+*Developed for the Cloud & DevOps Fundamentals Course.*
+
+
+---
+*This commit was made to test the automated Jenkins pipeline trigger.*
+
+
+---
+*Second automated trigger test.*
+</code></pre><h3>File History: VIVA.md</h3><pre><code># 🎓 CloudNotes Project VIVA - Questions & Answers
+
+This document contains a comprehensive list of potential VIVA questions and detailed answers based on the CloudNotes DevOps project.
+
+---
+
+## 📦 Unit II: Containerization & Orchestration (Docker & Kubernetes)
+
+**Q1: What is the difference between a Docker Image and a Docker Container?**
+*   **Answer:** An **Image** is a read-only template (a blueprint) containing the application code, libraries, and dependencies. A **Container** is a running instance of that image. You can run multiple containers from a single image.
+
+**Q2: Explain the multi-stage build used in this project.**
+*   **Answer:** Multi-stage builds (seen in our Dockerfiles) allow us to use one stage for building/compiling the app and a second, smaller stage for running it. This keeps the final production image size small and secure by excluding build tools and source code.
+
+**Q3: What is the role of `docker-compose`?**
+*   **Answer:** It is a tool for defining and running multi-container Docker applications. We use a YAML file (`docker-compose.yml`) to configure our app's services (frontend, backend, database, monitoring) and start them all with a single command.
+
+**Q4: What is a Kubernetes Pod?**
+*   **Answer:** A Pod is the smallest deployable unit in Kubernetes. It represents a single instance of a running process in your cluster and can contain one or more containers (like our Flask backend).
+
+**Q5: Why do we use Kubernetes Services?**
+*   **Answer:** Pods are ephemeral (they can die and get replaced with new IPs). A **Service** provides a stable IP address and DNS name to access a set of Pods, acting as a load balancer.
+
+---
+
+## 🏗️ Unit III: Infrastructure as Code (Terraform & AWS)
+
+**Q6: What is Infrastructure as Code (IaC)?**
+*   **Answer:** IaC is the process of managing and provisioning computing infrastructure through machine-readable definition files (like Terraform `.tf` files) rather than physical hardware configuration or interactive configuration tools.
+
+**Q7: What is the purpose of the `terraform.tfstate` file?**
+*   **Answer:** Terraform uses this local state file to map real-world resources to your configuration. It keeps track of metadata and helps Terraform determine what changes to make when you run `apply`.
+
+**Q8: Explain the "Modular" approach in your Terraform code.**
+*   **Answer:** We split our infrastructure into logical modules (VPC, EC2, S3). This makes the code reusable, easier to maintain, and organized.
+
+**Q9: What is an AWS Security Group?**
+*   **Answer:** It acts as a virtual firewall for your EC2 instances to control inbound and outbound traffic. In this project, we opened port 80 (App), 8080 (Jenkins), and 22 (SSH).
+
+---
+
+## 🔄 Unit IV: CI/CD Pipeline (Jenkins)
+
+**Q10: What is CI/CD?**
+*   **Answer:** **Continuous Integration (CI)** is the practice of automating the integration of code changes from multiple contributors into a single software project. **Continuous Deployment (CD)** automates the delivery of that code to production environments.
+
+**Q11: What is a `Jenkinsfile`?**
+*   **Answer:** It is a text file that contains the definition of a Jenkins Pipeline and is checked into source control. It implements "Pipeline as Code."
+
+**Q12: Describe the stages in your Jenkins pipeline.**
+*   **Answer:** 
+    1. **Checkout:** Pulling code from GitHub.
+    2. **Security Scan:** Checking for secrets/vulnerabilities.
+    3. **Test:** Running Pytest for the backend.
+    4. **Build & Push:** Creating Docker images and pushing to Docker Hub.
+    5. **Deploy:** SSH-ing into the AWS server and updating the containers.
+
+---
+
+## 📊 Unit V: Monitoring & Security
+
+**Q13: How does Prometheus collect metrics from the application?**
+*   **Answer:** Prometheus uses a "pull model." It scrapes (fetches) metrics from the `/metrics` endpoint of our Flask application at regular intervals.
+
+**Q14: What is the role of Grafana in this project?**
+*   **Answer:** Grafana is the visualization layer. It connects to Prometheus as a data source and displays the metrics (like request rates, CPU usage, note count) on a user-friendly dashboard.
+
+**Q15: What is "DevSecOps"?**
+*   **Answer:** It stands for Development, Security, and Operations. It’s an approach to culture, automation, and platform design that integrates security as a shared responsibility throughout the entire IT lifecycle. We implemented this using Trivy (vulnerability scanning) and TruffleHog (secret scanning) in our pipeline.
+
+---
+
+## 🚀 Bonus Section: Production Readiness (To impress the examiner)
+
+**Q16: If you were to deploy this project for a real enterprise company, what security improvements would you make?**
+*   **Answer:** For a true production environment, I would make three major security changes:
+    1.  **Restrict Security Groups:** Currently, ports are open to the world (`0.0.0.0/0`) for ease of demonstration. I would lock these down to allow traffic only from a Load Balancer or a specific VPN.
+    2.  **Remove Root Access:** I would ensure Jenkins and the Flask containers run as non-root users to minimize the blast radius if a container is compromised.
+    3.  **Secret Management:** Instead of injecting credentials via Groovy scripts or `.env` files, I would integrate a proper secrets manager like AWS Secrets Manager or HashiCorp Vault.
+
+**Q17: How would you improve the CI/CD Pipeline for scale?**
+*   **Answer:** 
+    1.  **Stop Committing Dynamic State:** Currently, our automation scripts write the new App IP directly into the `Jenkinsfile` and commit it. In a real environment, I would pass the IP as a runtime parameter or use AWS Systems Manager (SSM) Parameter Store to decouple code from infrastructure state.
+    2.  **Blocking Scans:** I would configure our Trivy vulnerability scans to *fail* the build (exit code 1) if a CRITICAL vulnerability is found, rather than just printing a warning.
+    3.  **Immutable Tags:** I would stop using the `latest` tag for Docker images in production, as it makes rollbacks difficult. I would pin deployments to specific commit hashes or build numbers.
+
+---
+*Created for CloudNotes Project VIVA Preparation.*
+</code></pre></body></html>

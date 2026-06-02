@@ -34,3 +34,4 @@ update_hook.ps1
 creds_*.groovy
 jenkins_creds*.groovy
 list_creds.groovy
+NUL
