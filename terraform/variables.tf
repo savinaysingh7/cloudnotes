@@ -29,3 +29,9 @@ variable "billing_alarm_threshold" {
   type        = number
   default     = 1
 }
+
+variable "ssh_public_key" {
+  description = "SSH public key used for EC2 key pair"
+  type        = string
+  default     = "CHANGE_ME_SSH_PUBLIC_KEY"
+}

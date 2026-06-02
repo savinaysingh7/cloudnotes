@@ -42,11 +42,15 @@ CloudNotes is a containerized note-taking application designed to demonstrate th
     ```bash
     git clone <your-repo-url>
     ```
-2.  **Run with Docker Compose:**
+2.  **Create local env file:**
+    ```bash
+    cp docker/.env.example docker/.env
+    ```
+3.  **Run with Docker Compose:**
     ```bash
     docker-compose -f docker/docker-compose.yml up --build
     ```
-3.  **Deploy to K8s:**
+4.  **Deploy to K8s:**
     ```bash
     kubectl apply -f kubernetes/
     ```

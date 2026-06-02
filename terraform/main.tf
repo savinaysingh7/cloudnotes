@@ -1,6 +1,6 @@
 resource "aws_key_pair" "deployer" {
   key_name   = "cloudnotes-key-new"
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDV1/ufOIYnrKHxed+hr8G+e28tG8Yyy1cYfONMBbfFY/P8319rbwMFTcbOo1/eKM0JOuPcNMUHTkhy3/d/ZYqowilE7x/Qr3+E3djIRqQGrlRkaqLSZVtxd8ZY/2qq0QexezTq2ylfw1LUXWSbg+6GKS8F3stAEJz5O/7MmVk/EFnvJHtJOUdXcWZDK/dVEcRS+C6aSY/d3lNxebHDwO63VSgycM8aBsxkvPT8wiMHbtJXMfvMZspTiox6GdSSAHX5ld2fD1HZOldlhM6NM4hCqMVr9EFKfxg4v4AmV6HYN+aGrIeOVILo86htLH9R2sAwymDIDNVIawo3TWWyNVb3 savin@MEERA"
+  public_key = var.ssh_public_key
 }
 
 module "vpc" {
@@ -79,11 +79,20 @@ module "app_ec2" {
                 rm -rf /opt/cloudnotes
                 git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /opt/cloudnotes
 
+                POSTGRES_PASSWORD_VALUE="$(printenv POSTGRES_PASSWORD || true)"
+                if [ -z "$POSTGRES_PASSWORD_VALUE" ]; then
+                  POSTGRES_PASSWORD_VALUE="CHANGE_ME"
+                fi
+                DATABASE_URL_VALUE="$(printenv DATABASE_URL || true)"
+                if [ -z "$DATABASE_URL_VALUE" ]; then
+                  DATABASE_URL_VALUE="CHANGE_ME_DATABASE_URL"
+                fi
+
                 cat <<EOC > /opt/cloudnotes/docker/.env
                 POSTGRES_DB=cloudnotes
                 POSTGRES_USER=admin
-                POSTGRES_PASSWORD=secret123
-                DATABASE_URL=postgresql://admin:secret123@db:5432/cloudnotes
+                POSTGRES_PASSWORD=$POSTGRES_PASSWORD_VALUE
+                DATABASE_URL=$DATABASE_URL_VALUE
                 EOC
 
                 cd /opt/cloudnotes
