@@ -109,11 +109,11 @@ pipeline {
         stage('Deploy to AWS Kubernetes') {
             steps {
                 script {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'app-server-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
+                    sshagent(credentials: ['app-server-ssh-key']) {
                         sh """
-                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} "mkdir -p /app/cloudnotes"
-                        scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_SSH_IP}:/app/cloudnotes/
-                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'bash -s' <<'REMOTE_DEPLOY'
+                        ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} "mkdir -p /app/cloudnotes"
+                        scp -o BatchMode=yes -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_SSH_IP}:/app/cloudnotes/
+                        ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'bash -s' <<'REMOTE_DEPLOY'
                             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
                             kubectl apply -f /app/cloudnotes/kubernetes/namespace.yaml
                             kubectl apply -f /app/cloudnotes/kubernetes/postgres-secret.yaml
