@@ -223,8 +223,16 @@ Write-Host "New Jenkins IP: $JENKINS_IP"
 Write-Host "Registering Jenkins-generated public key on the app host..."
 Wait-ForSsh -HostName $JENKINS_IP
 Wait-ForSsh -HostName $APP_IP
-$JenkinsPublicKey = (& ssh @script:SshOptions "ubuntu@$JENKINS_IP" "sudo cat /opt/jenkins/cloudnotes-secrets/app_ssh_private_key.pub").Trim()
-if ($LASTEXITCODE -ne 0 -or -not $JenkinsPublicKey.StartsWith("ssh-ed25519 ")) {
+$JenkinsPublicKey = $null
+for ($attempt = 1; $attempt -le 60; $attempt++) {
+    $candidateKey = (& ssh @script:SshOptions "ubuntu@$JENKINS_IP" "sudo test -s /opt/jenkins/cloudnotes-secrets/app_ssh_private_key.pub && sudo cat /opt/jenkins/cloudnotes-secrets/app_ssh_private_key.pub" 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $candidateKey) {
+        $JenkinsPublicKey = ($candidateKey | Out-String).Trim()
+        break
+    }
+    Start-Sleep -Seconds 10
+}
+if (-not $JenkinsPublicKey -or -not $JenkinsPublicKey.StartsWith("ssh-ed25519 ")) {
     throw "Could not retrieve the Jenkins deploy public key."
 }
 $registerKeyCommand = "grep -qxF '$JenkinsPublicKey' /home/ubuntu/.ssh/authorized_keys || printf '%s\n' '$JenkinsPublicKey' | sudo tee -a /home/ubuntu/.ssh/authorized_keys >/dev/null; sudo chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys; sudo chmod 600 /home/ubuntu/.ssh/authorized_keys"
