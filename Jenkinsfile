@@ -114,7 +114,7 @@ pipeline {
                         ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} "mkdir -p /home/ubuntu/cloudnotes"
                         scp -o BatchMode=yes -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_SSH_IP}:/home/ubuntu/cloudnotes/
                         ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'bash -s' <<'REMOTE_DEPLOY'
-                            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+                            export KUBECONFIG=/home/ubuntu/.kube/config
                             kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/namespace.yaml
                             kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-secret.yaml
                             kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-pvc.yaml
