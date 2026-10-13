@@ -206,7 +206,7 @@ if (-not (Test-Path -LiteralPath $PemPathInput)) {
     throw "Missing SSH private key: $PemPathInput"
 }
 $PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
-$JenkinsPemPathInput = if ($env:CLOUDNOTES_JENKINS_SSH_KEY_PATH) { $env:CLOUDNOTES_JENKINS_SSH_KEY_PATH } else { Join-Path $SecretDir "cloudnotes-deploy" }
+$JenkinsPemPathInput = if ($env:CLOUDNOTES_JENKINS_SSH_KEY_PATH) { $env:CLOUDNOTES_JENKINS_SSH_KEY_PATH } else { Join-Path $SecretDir "cloudnotes-ci" }
 $JenkinsPublicKeyPath = "$JenkinsPemPathInput.pub"
 if (-not (Test-Path -LiteralPath $JenkinsPemPathInput) -or -not (Test-Path -LiteralPath $JenkinsPublicKeyPath)) {
     throw "Missing dedicated Jenkins SSH key pair: $JenkinsPemPathInput"
