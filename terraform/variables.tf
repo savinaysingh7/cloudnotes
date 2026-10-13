@@ -35,11 +35,6 @@ variable "ssh_public_key" {
   type        = string
 }
 
-variable "app_ssh_public_key" {
-  description = "Dedicated public key Jenkins uses to deploy to the app instance"
-  type        = string
-}
-
 variable "admin_cidr" {
   description = "CIDR allowed to access SSH, Jenkins, and monitoring services"
   type        = string

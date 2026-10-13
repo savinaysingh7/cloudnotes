@@ -30,6 +30,11 @@ module "jenkins_ec2" {
                 git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /tmp/repo
                 cp /tmp/repo/jenkins/jenkins.yaml /opt/jenkins/jenkins.yaml
                 mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+                if [ ! -s /opt/jenkins/cloudnotes-secrets/app_ssh_private_key ]; then
+                  ssh-keygen -q -t ed25519 -N '' -f /opt/jenkins/cloudnotes-secrets/app_ssh_private_key -C cloudnotes-jenkins-deploy
+                fi
+                chown ubuntu:ubuntu /opt/jenkins/cloudnotes-secrets/app_ssh_private_key /opt/jenkins/cloudnotes-secrets/app_ssh_private_key.pub
+                chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key
                 if compgen -G "/tmp/repo/jenkins/init.groovy.d/*.groovy" > /dev/null; then
                   cp /tmp/repo/jenkins/init.groovy.d/*.groovy /opt/jenkins/init.groovy.d/
                 fi
@@ -74,12 +79,6 @@ module "app_ec2" {
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
                 apt-get install -y curl git
-
-                # Allow the dedicated Jenkins deploy key to reach the app instance.
-                install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
-                grep -qxF '${var.app_ssh_public_key}' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '${var.app_ssh_public_key}' >> /home/ubuntu/.ssh/authorized_keys
-                chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys
-                chmod 600 /home/ubuntu/.ssh/authorized_keys
 
                 # K3s provides the Kubernetes control plane and container runtime.
                 # The bundled Traefik controller is disabled; ingress-nginx is installed below.

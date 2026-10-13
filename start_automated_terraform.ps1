@@ -102,9 +102,7 @@ function Copy-ToRemote {
 function Install-JenkinsCredentials {
     param(
         [Parameter(Mandatory = $true)][string]$JenkinsIp,
-        [Parameter(Mandatory = $true)][string]$PemPath,
-        [Parameter(Mandatory = $true)][string]$DockerHubPassword,
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$SshKeyPassphrase
+        [Parameter(Mandatory = $true)][string]$DockerHubPassword
     )
 
     $initScript = Join-Path $ProjectRoot "jenkins\init.groovy.d\creds.groovy"
@@ -119,17 +117,18 @@ function Install-JenkinsCredentials {
     $sshPassphraseSecret = Join-Path $tempDir "ssh_key_passphrase"
     $installScript = Join-Path $tempDir "install_cloudnotes_creds.sh"
     [System.IO.File]::WriteAllText($dockerSecret, $DockerHubPassword, $Utf8NoBom)
-    [System.IO.File]::WriteAllText($sshPassphraseSecret, $SshKeyPassphrase, $Utf8NoBom)
+    [System.IO.File]::WriteAllText($sshPassphraseSecret, "", $Utf8NoBom)
     $installScriptContent = @'
 set -euo pipefail
 
 sudo mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
 sudo mv /tmp/cloudnotes_creds.groovy /opt/jenkins/init.groovy.d/creds.groovy
-sudo mv /tmp/cloudnotes_app_ssh_private_key /opt/jenkins/cloudnotes-secrets/app_ssh_private_key
 sudo mv /tmp/cloudnotes_dockerhub_password /opt/jenkins/cloudnotes-secrets/dockerhub_password
 sudo mv /tmp/cloudnotes_ssh_key_passphrase /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase
-sudo chown -R root:root /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
-sudo chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
+sudo chown -R root:root /opt/jenkins/init.groovy.d
+sudo chown -R ubuntu:ubuntu /opt/jenkins/cloudnotes-secrets
+sudo chmod 755 /opt/jenkins/init.groovy.d
+sudo chmod 700 /opt/jenkins/cloudnotes-secrets
 sudo chmod 644 /opt/jenkins/init.groovy.d/creds.groovy
 sudo chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key /opt/jenkins/cloudnotes-secrets/dockerhub_password /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase
 
@@ -165,7 +164,6 @@ echo "Jenkins restarted after credential installation."
         Wait-ForSsh -HostName $JenkinsIp
         Invoke-Remote -HostName $JenkinsIp -Command "mkdir -p /tmp"
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $initScript -RemotePath "/tmp/cloudnotes_creds.groovy"
-        Copy-ToRemote -HostName $JenkinsIp -LocalPath $PemPath -RemotePath "/tmp/cloudnotes_app_ssh_private_key"
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $dockerSecret -RemotePath "/tmp/cloudnotes_dockerhub_password"
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $sshPassphraseSecret -RemotePath "/tmp/cloudnotes_ssh_key_passphrase"
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $installScript -RemotePath "/tmp/install_cloudnotes_creds.sh"
@@ -188,17 +186,6 @@ $DockerHubPassword = Read-RequiredSecret `
     -Name "Docker Hub password" `
     -EnvName "CLOUDNOTES_DOCKERHUB_PASSWORD" `
     -FilePath (Join-Path $SecretDir "dockerhub_password.txt")
-$SshKeyPassphrasePath = Join-Path $SecretDir "ssh_key_passphrase.txt"
-$SshKeyPassphrase = [Environment]::GetEnvironmentVariable("CLOUDNOTES_SSH_KEY_PASSPHRASE")
-if ($null -eq $SshKeyPassphrase -and (Test-Path -LiteralPath $SshKeyPassphrasePath)) {
-    $SshKeyPassphrase = [System.IO.File]::ReadAllText(
-        (Resolve-Path -LiteralPath $SshKeyPassphrasePath).Path,
-        [System.Text.Encoding]::UTF8
-    ).TrimEnd("`r", "`n")
-}
-if ($null -eq $SshKeyPassphrase) {
-    throw "Missing SSH key passphrase file: $SshKeyPassphrasePath (leave it empty for an unencrypted key)."
-}
 $HookId = if ($env:CLOUDNOTES_GITHUB_HOOK_ID) { $env:CLOUDNOTES_GITHUB_HOOK_ID } else { "628416052" }
 $Repo = if ($env:CLOUDNOTES_GITHUB_REPO) { $env:CLOUDNOTES_GITHUB_REPO } else { "savinaysingh7/cloudnotes" }
 $PemPathInput = if ($env:CLOUDNOTES_SSH_KEY_PATH) { $env:CLOUDNOTES_SSH_KEY_PATH } else { Join-Path $env:USERPROFILE ".ssh\cloudnotes-aws" }
@@ -206,22 +193,13 @@ if (-not (Test-Path -LiteralPath $PemPathInput)) {
     throw "Missing SSH private key: $PemPathInput"
 }
 $PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
-$JenkinsPemPathInput = if ($env:CLOUDNOTES_JENKINS_SSH_KEY_PATH) { $env:CLOUDNOTES_JENKINS_SSH_KEY_PATH } else { Join-Path $SecretDir "cloudnotes-ci" }
-$JenkinsPublicKeyPath = "$JenkinsPemPathInput.pub"
-if (-not (Test-Path -LiteralPath $JenkinsPemPathInput) -or -not (Test-Path -LiteralPath $JenkinsPublicKeyPath)) {
-    throw "Missing dedicated Jenkins SSH key pair: $JenkinsPemPathInput"
-}
-$JenkinsPemPath = (Resolve-Path -LiteralPath $JenkinsPemPathInput).Path
-$JenkinsPublicKey = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $JenkinsPublicKeyPath).Path, [System.Text.Encoding]::UTF8).Trim()
-$JenkinsKeyPassphrase = [Environment]::GetEnvironmentVariable("CLOUDNOTES_JENKINS_SSH_KEY_PASSPHRASE")
-if ($null -eq $JenkinsKeyPassphrase) { $JenkinsKeyPassphrase = "" }
 $script:SshOptions = @("-i", $PemPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
 
 Write-Host "Initializing Terraform..."
 terraform -chdir=terraform init -no-color | Out-Null
 
 Write-Host "Applying Terraform Infrastructure (this may take 2-3 mins)..."
-terraform -chdir=terraform apply -auto-approve -no-color "-var=app_ssh_public_key=$JenkinsPublicKey"
+terraform -chdir=terraform apply -auto-approve -no-color
 
 Write-Host "Fetching new IPs from Terraform..."
 $APP_IP = (terraform -chdir=terraform output -raw app_public_ip).Trim()
@@ -241,6 +219,16 @@ if (-not $APP_PRIVATE_IP) {
 Write-Host "New App IP: $APP_IP"
 Write-Host "New App private IP: $APP_PRIVATE_IP"
 Write-Host "New Jenkins IP: $JENKINS_IP"
+
+Write-Host "Registering Jenkins-generated public key on the app host..."
+Wait-ForSsh -HostName $JENKINS_IP
+Wait-ForSsh -HostName $APP_IP
+$JenkinsPublicKey = (& ssh @script:SshOptions "ubuntu@$JENKINS_IP" "sudo cat /opt/jenkins/cloudnotes-secrets/app_ssh_private_key.pub").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $JenkinsPublicKey.StartsWith("ssh-ed25519 ")) {
+    throw "Could not retrieve the Jenkins deploy public key."
+}
+$registerKeyCommand = "grep -qxF '$JenkinsPublicKey' /home/ubuntu/.ssh/authorized_keys || printf '%s\n' '$JenkinsPublicKey' | sudo tee -a /home/ubuntu/.ssh/authorized_keys >/dev/null; sudo chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys; sudo chmod 600 /home/ubuntu/.ssh/authorized_keys"
+Invoke-Remote -HostName $APP_IP -Command $registerKeyCommand
 
 Write-Host "Updating Jenkinsfile..."
 $JenkinsfilePath = Join-Path $ProjectRoot "Jenkinsfile"
@@ -262,7 +250,7 @@ if ($UpdatedJenkinsfile -notmatch "APP_SERVER_IP\s*=\s*'$([regex]::Escape($APP_I
 [System.IO.File]::WriteAllText($JenkinsfilePath, $UpdatedJenkinsfile, $Utf8NoBom)
 
 Write-Host "Installing Jenkins credentials..."
-Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -PemPath $JenkinsPemPath -DockerHubPassword $DockerHubPassword -SshKeyPassphrase $JenkinsKeyPassphrase
+Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -DockerHubPassword $DockerHubPassword
 
 Write-Host "Updating GitHub Webhook..."
 $Headers = @{
