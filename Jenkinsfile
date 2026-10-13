@@ -15,7 +15,7 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
-        APP_SERVER_IP   = '3.110.169.107'
+        APP_SERVER_IP   = '13.235.24.218'
         PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
 
@@ -105,40 +105,38 @@ pipeline {
             }
         }
 
-        stage('Deploy to AWS Production') {
+        stage('Deploy to AWS Kubernetes') {
             steps {
                 script {
                     withCredentials([sshUserPrivateKey(credentialsId: 'app-server-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
                         sh """
-                        echo "POSTGRES_DB=cloudnotes" > docker/.env
-                        echo "POSTGRES_USER=admin" >> docker/.env
-                        echo "POSTGRES_PASSWORD=\${POSTGRES_PASSWORD:-CHANGE_ME}" >> docker/.env
-                        echo "DATABASE_URL=\${DATABASE_URL:-postgresql://admin:\${POSTGRES_PASSWORD:-CHANGE_ME}@db:5432/cloudnotes}" >> docker/.env
-                        echo "GF_SECURITY_ADMIN_PASSWORD=\${GF_SECURITY_ADMIN_PASSWORD:-CHANGE_ME}" >> docker/.env
-
-                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "sudo mkdir -p /app && sudo chown ubuntu:ubuntu /app"
-                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/docker-compose.prod.yml ubuntu@\${APP_SERVER_IP}:/app/docker-compose.yml
-                        scp -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no docker/.env ubuntu@\${APP_SERVER_IP}:/app/
-                        scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no monitoring ubuntu@\${APP_SERVER_IP}:/app/
+                        ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} "mkdir -p /app/cloudnotes"
+                        scp -i \${SSH_KEY_PATH} -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_IP}:/app/cloudnotes/
                         ssh -i \${SSH_KEY_PATH} -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_IP} 'bash -s' <<'REMOTE_DEPLOY'
-                            if [ -d /opt/cloudnotes ]; then
-                                cd /opt/cloudnotes
-                                sudo docker compose -f docker/docker-compose.yml down || true
-                            fi
-                            cd /app
-                            sudo docker compose pull
-                            sudo docker compose up -d --remove-orphans
-                            sudo docker compose up -d --force-recreate prometheus grafana
+                            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/namespace.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/postgres-secret.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/postgres-pvc.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/postgres-deployment.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/backend-deployment.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/frontend-deployment.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/monitoring.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/hpa.yaml
+                            kubectl apply -f /app/cloudnotes/kubernetes/ingress.yaml
+                            kubectl set image deployment/backend backend=${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} -n cloudnotes
+                            kubectl set image deployment/frontend frontend=${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} -n cloudnotes
+                            kubectl rollout status deployment/backend -n cloudnotes --timeout=180s
+                            kubectl rollout status deployment/frontend -n cloudnotes --timeout=180s
 
                             for attempt in \$(seq 1 30); do
-                                if curl -fsS http://localhost/ >/dev/null && curl -fsS http://localhost:5000/api/health >/dev/null; then
+                                if curl -fsS -H 'Host: cloudnotes.local' http://localhost/api/health >/dev/null; then
                                     exit 0
                                 fi
                                 sleep 5
                             done
 
                             echo "Deployment health check failed"
-                            sudo docker compose ps
+                            kubectl get pods -n cloudnotes
                             exit 1
 REMOTE_DEPLOY
                         """
