@@ -1,0 +1,38 @@
+@startuml
+title CloudNotes -- Terraform AWS Provisioning Architecture
+top to bottom direction
+skinparam componentStyle rectangle
+component "Terraform AWS Provider" as terraform
+cloud "AWS Account (ap-south-1)" {
+  frame "VPC 10.0.0.0/16" {
+    component "Internet Gateway" as igw
+    component "Public Subnet 10.0.1.0/24" as subnet
+    component "Route Table" as route
+    component "Jenkins Security Group" as jsg
+    component "Application Security Group\nSSH, HTTP, HTTPS" as asg
+    node "Jenkins EC2" as jec2
+    node "Application EC2" as aec2
+  }
+  folder "S3 Bucket" as bucket
+  component "SNS Billing Alarm\n(us-east-1)" as billing
+}
+terraform --> igw
+terraform --> subnet
+terraform --> route
+terraform --> jsg
+terraform --> asg
+terraform --> jec2
+terraform --> aec2
+terraform --> bucket
+terraform --> billing
+igw --> route
+route --> subnet
+subnet --> jec2
+subnet --> aec2
+jsg --> jec2
+asg --> aec2
+note right of aec2
+user_data installs K3s,
+ingress-nginx, and KEDA
+end note
+@enduml

@@ -1,0 +1,27 @@
+@startuml
+title CloudNotes -- Functional and Operational Use Cases
+left to right direction
+actor "End User" as user
+actor "Developer" as developer
+actor "DevOps Operator" as operator
+rectangle CloudNotes {
+  usecase "Create note" as create
+  usecase "View and search notes" as read
+  usecase "Update note" as update
+  usecase "Delete note" as delete
+  usecase "Push source change" as push
+  usecase "Run CI/CD pipeline" as pipeline
+  usecase "Deploy to Kubernetes" as deploy
+  usecase "View live dashboard" as dashboard
+  usecase "Inspect scaling status" as scaling
+}
+user --> create
+user --> read
+user --> update
+user --> delete
+developer --> push
+push .> pipeline : triggers
+pipeline .> deploy : releases
+operator --> dashboard
+operator --> scaling
+@enduml

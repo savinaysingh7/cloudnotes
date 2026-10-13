@@ -1,0 +1,37 @@
+@startuml
+title CloudNotes -- AWS Deployment Topology
+left to right direction
+skinparam componentStyle rectangle
+cloud Internet as internet
+node "AWS VPC" {
+  node "Jenkins EC2" as jenkins {
+    component "Jenkins" as ci
+    component "Docker CLI" as docker
+  }
+  node "Application EC2" as app {
+    node "K3s Cluster" {
+      component "ingress-nginx" as ingress
+      package "cloudnotes namespace" {
+        component "frontend Pods" as frontend
+        component "backend Pods" as backend
+        database "PostgreSQL + PVC" as db
+        component "Prometheus" as prom
+        component "KEDA" as keda
+      }
+    }
+  }
+}
+cloud "GitHub" as github
+cloud "Docker Hub" as registry
+internet --> ingress : ports 80/443
+github --> ci : webhook
+ci --> registry : push images
+ci --> app : SSH / kubectl deployment
+registry --> frontend : pull image
+registry --> backend : pull image
+ingress --> frontend
+ingress --> backend
+backend --> db
+backend --> prom
+prom --> keda
+@enduml

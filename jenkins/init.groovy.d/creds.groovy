@@ -32,6 +32,14 @@ String normalizePrivateKey(String privateKey) {
     return stripBom(privateKey).replace('\r\n', '\n').replace('\r', '\n').trim() + '\n'
 }
 
+String readOptionalSecretFile(String path) {
+    File secretFile = new File(path)
+    if (!secretFile.exists() || !secretFile.isFile()) {
+        return null
+    }
+    return stripBom(secretFile.getText('UTF-8')).replaceFirst(/[\r\n]+$/, '')
+}
+
 def jenkins = Jenkins.get()
 def provider = jenkins.getExtensionList(SystemCredentialsProvider.class)[0]
 def store = provider.getStore()
@@ -48,8 +56,19 @@ String appSshPrivateKey = readSecret(
     ['/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key'],
     false
 )
+String appSshKeyPassphrase = readSecret(
+    'CLOUDNOTES_SSH_KEY_PASSPHRASE',
+    ['/var/jenkins_home/cloudnotes-secrets/ssh_key_passphrase'],
+    false
+)
+if (appSshKeyPassphrase == null) {
+    appSshKeyPassphrase = readOptionalSecretFile('/var/jenkins_home/cloudnotes-secrets/ssh_key_passphrase')
+}
+if (appSshKeyPassphrase != null) {
+    appSshKeyPassphrase = appSshKeyPassphrase.replaceFirst(/[\r\n]+$/, '')
+}
 
-if (!dockerHubPassword || !appSshPrivateKey) {
+if (!dockerHubPassword || !appSshPrivateKey || appSshKeyPassphrase == null) {
     println '[cloudnotes-creds] Secret files are not present yet; credential injection skipped.'
 } else {
     def upsertCredential = { credential ->
@@ -74,7 +93,7 @@ if (!dockerHubPassword || !appSshPrivateKey) {
         'app-server-ssh-key',
         'ubuntu',
         new BasicSSHUserPrivateKey.DirectEntryPrivateKeySource(normalizePrivateKey(appSshPrivateKey)),
-        '',
+        appSshKeyPassphrase,
         'CloudNotes app server SSH key'
     ))
 

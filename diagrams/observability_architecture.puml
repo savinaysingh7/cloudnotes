@@ -1,0 +1,17 @@
+@startuml
+title CloudNotes -- Observability Architecture
+left to right direction
+skinparam componentStyle rectangle
+component "Backend /metrics endpoint" as backend
+component "Prometheus\nscrape interval: 15 s" as prometheus
+component "Alert Rules\navailability, errors, latency" as alerts
+database "Prometheus Time-Series Database" as tsdb
+component "Grafana\ndashboard refresh: 5 s" as grafana
+actor "DevOps Operator" as operator
+backend --> prometheus : HTTP metrics
+prometheus --> tsdb : store samples
+prometheus --> alerts : evaluate PromQL
+grafana --> prometheus : dashboard queries
+grafana --> operator : live panels
+alerts --> operator : operational alert condition
+@enduml

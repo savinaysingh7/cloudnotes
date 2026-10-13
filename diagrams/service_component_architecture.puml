@@ -1,0 +1,24 @@
+@startuml
+title CloudNotes -- Service-Component Architecture
+left to right direction
+skinparam componentStyle rectangle
+component "Browser" as browser
+component "NGINX Ingress" as ingress
+package "Frontend Container" {
+  component "Static HTML, CSS, JavaScript" as ui
+  component "NGINX reverse proxy" as proxy
+}
+package "Backend Container" {
+  component "REST API" as api
+  component "Note business logic" as logic
+  component "Prometheus metrics endpoint" as metrics
+}
+database "PostgreSQL Database" as db
+browser --> ingress
+ingress --> ui
+ui --> proxy : /api requests
+proxy --> api : HTTP/JSON
+api --> logic
+logic --> db : SQLAlchemy / SQL
+metrics <-- api : HTTP and business counters
+@enduml

@@ -1,0 +1,15 @@
+@startgantt
+title CloudNotes -- Evidence-Based Project Timeline
+Project starts 2026-05-19
+printscale weekly
+
+[Initial scaffold and AWS deployment] starts 2026-05-19
+[Initial scaffold and AWS deployment] ends 2026-05-22
+[Jenkins, CI/CD, and monitoring hardening] starts 2026-05-22
+[Jenkins, CI/CD, and monitoring hardening] ends 2026-05-26
+[Security cleanup and documentation refactoring] starts 2026-05-29
+[Security cleanup and documentation refactoring] ends 2026-06-02
+
+[Planned final validation, diagrams, and synopsis] starts 2026-09-02
+[Planned final validation, diagrams, and synopsis] ends 2026-09-12
+@endgantt

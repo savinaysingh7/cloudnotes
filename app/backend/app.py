@@ -7,9 +7,14 @@ from datetime import datetime, timezone
 import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL', 'sqlite:///notes.db'
-)
+database_url = os.getenv('DATABASE_URL', 'sqlite:///notes.db')
+# SQLAlchemy 2.1 defaults bare PostgreSQL URLs to psycopg 3. This project
+# installs psycopg2-binary, so select that driver explicitly for compatibility.
+if database_url.startswith('postgresql://'):
+    database_url = database_url.replace(
+        'postgresql://', 'postgresql+psycopg2://', 1
+    )
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 CORS(app)  # Enable CORS for all routes
@@ -36,7 +41,10 @@ class Note(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception:
+        pass
     # Auto-migrate: add created_at column if it doesn't exist on an older DB
     try:
         from sqlalchemy import text, inspect

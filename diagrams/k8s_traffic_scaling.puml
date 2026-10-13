@@ -1,0 +1,31 @@
+@startuml
+title CloudNotes -- Kubernetes Traffic-Based Horizontal Scaling
+left to right direction
+skinparam componentStyle rectangle
+actor Browser
+component "NGINX Ingress" as ingress
+package "cloudnotes namespace" {
+  component "frontend Service" as fe_service
+  component "frontend Deployment\n2--4 replicas" as frontend
+  component "backend Service" as be_service
+  component "backend Deployment\n2--5 replicas" as backend
+  database "PostgreSQL PVC" as postgres
+  component "Prometheus" as prometheus
+  component "KEDA ScaledObjects" as keda
+}
+Browser --> ingress
+ingress --> fe_service
+ingress --> be_service : /api
+fe_service --> frontend
+be_service --> backend
+frontend --> backend : REST API
+backend --> postgres
+prometheus <-- backend : scrape /metrics every 15 s
+prometheus --> keda : rate(flask_http_request_total[1m])
+keda --> backend : change replicas
+keda --> frontend : change replicas
+note bottom of keda
+Horizontal scaling only.
+No Vertical Pod Autoscaler.
+end note
+@enduml

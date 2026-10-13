@@ -1,0 +1,23 @@
+@startuml
+title CloudNotes -- Note Data Model
+hide methods
+class Note {
+  +id: Integer <<primary key>>
+  +title: String(100)
+  +body: Text
+  +created_at: DateTime
+}
+class BackendAPI {
+  +GET /api/notes
+  +POST /api/notes
+  +PUT /api/notes/{id}
+  +DELETE /api/notes/{id}
+}
+database PostgreSQL
+BackendAPI --> Note : validates and maps
+Note --> PostgreSQL : persisted as table rows
+note right of Note
+title and body are required.
+created_at is assigned on creation.
+end note
+@enduml

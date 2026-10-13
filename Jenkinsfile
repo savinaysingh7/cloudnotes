@@ -111,19 +111,19 @@ pipeline {
                 script {
                     sshagent(credentials: ['app-server-ssh-key']) {
                         sh """
-                        ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} "mkdir -p /app/cloudnotes"
-                        scp -o BatchMode=yes -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_SSH_IP}:/app/cloudnotes/
+                        ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} "mkdir -p /home/ubuntu/cloudnotes"
+                        scp -o BatchMode=yes -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_SSH_IP}:/home/ubuntu/cloudnotes/
                         ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'bash -s' <<'REMOTE_DEPLOY'
                             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/namespace.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/postgres-secret.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/postgres-pvc.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/postgres-deployment.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/backend-deployment.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/frontend-deployment.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/monitoring.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/hpa.yaml
-                            kubectl apply -f /app/cloudnotes/kubernetes/ingress.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/namespace.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-secret.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-pvc.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-deployment.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/backend-deployment.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/frontend-deployment.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/monitoring.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/hpa.yaml
+                            kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/ingress.yaml
                             kubectl set image deployment/backend backend=${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} -n cloudnotes
                             kubectl set image deployment/frontend frontend=${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} -n cloudnotes
                             kubectl rollout status deployment/backend -n cloudnotes --timeout=180s

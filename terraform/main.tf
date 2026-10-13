@@ -6,6 +6,7 @@ resource "aws_key_pair" "deployer" {
 module "vpc" {
   source       = "./modules/vpc"
   project_name = var.project_name
+  admin_cidr   = var.admin_cidr
 }
 
 module "jenkins_ec2" {
@@ -72,31 +73,28 @@ module "app_ec2" {
                 exec > /tmp/deploy.log 2>&1
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
-                apt-get install -y docker.io curl docker-compose-v2 git
-                systemctl start docker
-                systemctl enable docker
+                apt-get install -y curl git
 
-                rm -rf /opt/cloudnotes
-                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /opt/cloudnotes
+                # Allow the dedicated Jenkins deploy key to reach the app instance.
+                install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
+                grep -qxF '${var.app_ssh_public_key}' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || printf '%s\n' '${var.app_ssh_public_key}' >> /home/ubuntu/.ssh/authorized_keys
+                chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys
+                chmod 600 /home/ubuntu/.ssh/authorized_keys
 
-                POSTGRES_PASSWORD_VALUE="$(printenv POSTGRES_PASSWORD || true)"
-                if [ -z "$POSTGRES_PASSWORD_VALUE" ]; then
-                  POSTGRES_PASSWORD_VALUE="CHANGE_ME"
-                fi
-                DATABASE_URL_VALUE="$(printenv DATABASE_URL || true)"
-                if [ -z "$DATABASE_URL_VALUE" ]; then
-                  DATABASE_URL_VALUE="CHANGE_ME_DATABASE_URL"
-                fi
+                # K3s provides the Kubernetes control plane and container runtime.
+                # The bundled Traefik controller is disabled; ingress-nginx is installed below.
+                curl -sfL https://get.k3s.io | sh -s - --disable traefik
+                mkdir -p /home/ubuntu/.kube
+                cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
+                chown -R ubuntu:ubuntu /home/ubuntu/.kube
 
-                cat <<EOC > /opt/cloudnotes/docker/.env
-                POSTGRES_DB=cloudnotes
-                POSTGRES_USER=admin
-                POSTGRES_PASSWORD=$POSTGRES_PASSWORD_VALUE
-                DATABASE_URL=$DATABASE_URL_VALUE
-                EOC
-
-                cd /opt/cloudnotes
-                docker compose -f docker/docker-compose.yml up -d --build
+                # KEDA supplies Prometheus-driven, request-rate horizontal scaling.
+                curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm repo add kedacore https://kedacore.github.io/charts
+                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm repo update
+                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm upgrade --install keda kedacore/keda --namespace keda --create-namespace
+                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
                 EOF
 }
 

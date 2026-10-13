@@ -1,0 +1,29 @@
+@startuml
+title CloudNotes -- CI/CD and Observability Workflow
+left to right direction
+skinparam componentStyle rectangle
+actor Developer
+cloud "GitHub Repository" as github
+component "GitHub Push Webhook" as webhook
+component "Jenkins Pipeline" as jenkins
+database "Docker Hub Image Registry" as registry
+node "AWS Application EC2" {
+  component "K3s / kubectl" as cluster
+  component "CloudNotes Pods" as pods
+  component "Prometheus" as prometheus
+  component "Grafana Dashboard\nrefresh: 5 s" as grafana
+}
+Developer --> github : git push
+github --> webhook
+webhook --> jenkins : trigger build
+jenkins --> jenkins : checkout, tests\nsecret scan, image scan
+jenkins --> registry : build and push tagged images
+jenkins --> cluster : SSH + kubectl apply\nset image + rollout status
+registry --> pods : image pull
+pods --> prometheus : expose /metrics
+prometheus --> grafana : PromQL queries
+grafana --> Developer : live metrics and analysis
+note bottom of jenkins
+GitHub Actions is not used.
+end note
+@enduml

@@ -38,28 +38,21 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_security_group" "jenkins_sg" {
   name        = "jenkins-sg"
-  description = "Allow inbound SSH and HTTP for Jenkins"
+  description = "Allow SSH and Jenkins access from the configured admin CIDR"
   vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   ingress {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   egress {
@@ -72,21 +65,22 @@ resource "aws_security_group" "jenkins_sg" {
 
 resource "aws_security_group" "app_sg" {
   name        = "app-sg"
-  description = "Allow inbound HTTP for App"
+  description = "Allow public web traffic and admin access from the configured CIDR"
   vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   ingress {
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "Allow the Jenkins host to deploy the application over SSH"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.jenkins_sg.id]
   }
 
   ingress {
@@ -97,8 +91,8 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
-    from_port   = 5000
-    to_port     = 5000
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -107,14 +101,14 @@ resource "aws_security_group" "app_sg" {
     from_port   = 3001
     to_port     = 3001
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   ingress {
     from_port   = 9091
     to_port     = 9091
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   egress {
@@ -126,3 +120,6 @@ resource "aws_security_group" "app_sg" {
 }
 
 variable "project_name" {}
+variable "admin_cidr" {
+  type = string
+}

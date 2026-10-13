@@ -33,5 +33,19 @@ variable "billing_alarm_threshold" {
 variable "ssh_public_key" {
   description = "SSH public key used for EC2 key pair"
   type        = string
-  default     = "CHANGE_ME_SSH_PUBLIC_KEY"
+}
+
+variable "app_ssh_public_key" {
+  description = "Dedicated public key Jenkins uses to deploy to the app instance"
+  type        = string
+}
+
+variable "admin_cidr" {
+  description = "CIDR allowed to access SSH, Jenkins, and monitoring services"
+  type        = string
+
+  validation {
+    condition     = can(cidrnetmask(var.admin_cidr))
+    error_message = "admin_cidr must be a valid IPv4 CIDR block (for example, 203.0.113.10/32)."
+  }
 }

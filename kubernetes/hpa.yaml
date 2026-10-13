@@ -1,39 +1,42 @@
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
 metadata:
-  name: backend-hpa
+  name: backend-traffic-scaler
   namespace: cloudnotes
 spec:
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
     name: backend
-  minReplicas: 2
-  maxReplicas: 5
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
+  minReplicaCount: 2
+  maxReplicaCount: 5
+  pollingInterval: 15
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        # Requests per second is a direct traffic signal, rather than CPU use.
+        serverAddress: http://prometheus.cloudnotes.svc.cluster.local:9090
+        metricName: backend_requests_per_second
+        query: sum(rate(flask_http_request_total[1m]))
+        threshold: "5"
 ---
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
 metadata:
-  name: frontend-hpa
+  name: frontend-traffic-scaler
   namespace: cloudnotes
 spec:
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
     name: frontend
-  minReplicas: 2
-  maxReplicas: 4
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 80
+  minReplicaCount: 2
+  maxReplicaCount: 4
+  pollingInterval: 15
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        # Frontend replicas follow the API request rate, the traffic signal exposed
+        # by this application. Static NGINX traffic is not instrumented separately.
+        serverAddress: http://prometheus.cloudnotes.svc.cluster.local:9090
+        metricName: frontend_requests_per_second
+        query: sum(rate(flask_http_request_total[1m]))
+        threshold: "10"

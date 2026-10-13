@@ -1,0 +1,23 @@
+@startuml
+title CloudNotes -- Create Note Request Sequence
+actor User
+participant Browser
+participant "NGINX Ingress / Frontend" as frontend
+participant "Backend REST API" as backend
+database PostgreSQL
+participant Prometheus
+participant Grafana
+User -> Browser : Enter title and body
+Browser -> frontend : POST /api/notes
+frontend -> backend : Forward JSON request
+backend -> backend : Validate input
+backend -> PostgreSQL : INSERT note
+PostgreSQL --> backend : New note ID
+backend -> backend : Increment notes_created_total
+backend --> frontend : 201 Created + JSON
+frontend --> Browser : Display created note
+Prometheus -> backend : GET /metrics
+backend --> Prometheus : HTTP and note counters
+Grafana -> Prometheus : Query request and note metrics
+Prometheus --> Grafana : Time-series results
+@enduml

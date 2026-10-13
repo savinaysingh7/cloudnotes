@@ -1,0 +1,23 @@
+@startuml
+title CloudNotes -- Jenkins Pipeline Sequence
+actor Developer
+participant GitHub
+participant Jenkins
+participant "Docker Hub" as registry
+participant "Application EC2 / K3s" as cluster
+Developer -> GitHub : Push commit
+GitHub -> Jenkins : githubPush webhook
+Jenkins -> Jenkins : Checkout source
+Jenkins -> Jenkins : Build backend test image
+Jenkins -> Jenkins : Run unit tests
+Jenkins -> Jenkins : Scan verified secrets
+Jenkins -> Jenkins : Build frontend/backend images
+Jenkins -> Jenkins : Scan image vulnerabilities
+Jenkins -> registry : Push build-number tags
+Jenkins -> cluster : Copy manifests via SSH
+Jenkins -> cluster : kubectl apply manifests
+Jenkins -> cluster : kubectl set image
+Jenkins -> cluster : Wait for rollout status
+Jenkins -> cluster : Ingress health check
+cluster --> Jenkins : Healthy release or failure
+@enduml
