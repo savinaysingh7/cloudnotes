@@ -11,6 +11,8 @@ The application supports creating, listing, searching, editing, and deleting not
 - [Run and deployment guide](HOW_TO_RUN.md)
 - [Viva questions and answers](VIVA.md)
 
+Regenerate the report PDF after editing the Markdown source with `python scripts/build_report_pdf.py` (requires ReportLab).
+
 ## Architecture
 
 ```text

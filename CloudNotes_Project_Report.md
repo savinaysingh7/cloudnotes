@@ -164,20 +164,17 @@ Prometheus metrics support KEDA's request-rate scaling trigger. Monitoring alert
 
 # 8. Verification and Acceptance Plan
 
-The repository includes backend tests at `app/backend/tests/test_app.py` for health, create validation, listing, search, update, deletion, and missing IDs. End-to-end browser automation is under `tests/e2e/`. A complete demonstration should capture outputs from the actual environment rather than infer success from configuration files.
+The repository includes backend tests at `app/backend/tests/test_app.py` for health, create validation, listing, search, update, deletion, and missing IDs. End-to-end browser automation is under `tests/e2e/`. The results below record the AWS run completed on 14 October 2026; they distinguish checks that ran from features that were not measured.
 
-| Area | Demonstration | Evidence |
+| Area | Verification | Recorded result |
 | --- | --- | --- |
-| Application | Create, list, search, edit, and delete a note | Browser flow and persisted API response |
-| Containers | Build and start Compose stack | Successful image builds and healthy services |
-| Kubernetes | Apply manifests; inspect pods, services, ingress, PVC | Ready resources and successful health check |
-| CI/CD | Push a harmless change | Jenkins stage results, published build tags, successful rollout |
-| Scaling | Generate sustained API traffic | Prometheus request-rate query and KEDA/deployment replica changes |
-| Monitoring | Perform note operations | Prometheus targets/alerts and Grafana panel updates |
-| Infrastructure | Terraform plan/apply in authorized account | Plan and outputs; AWS resource state |
-| Cleanup | Destroy demonstration infrastructure | Terraform output and AWS account resource review |
+| Application | Request `/`, `/api/health`, and `/api/notes` through the AWS Ingress with Host `cloudnotes.local` | HTTP 200 for all three; health body `{"status":"ok"}` and notes body `[]`. Without the required host header, ingress returned HTTP 404. |
+| CI/CD | Execute the CloudNotes Jenkins pipeline | Build #2 succeeded; backend tests, TruffleHog, Trivy, Docker Hub image push, Kubernetes rollout, and ingress health check ran. Trivy is configured as non-blocking. |
+| Kubernetes | Deploy application, database, monitoring, ingress, and KEDA manifests | K3s node and platform pods reached Ready; Jenkins completed rollout and health checks. |
+| Infrastructure | Apply and destroy the Terraform configuration | 14 resources created in `ap-south-1`; Terraform reported all 14 destroyed after verification. |
+| Scaling | Observe replicas while generating sustained API traffic | Not measured during this run. The KEDA configuration exists, but no scaling event is claimed. |
 
-Configuration in the repository describes the intended setup; runtime acceptance evidence must be collected during the actual run. Do not claim an AWS endpoint, pipeline build, or autoscaling event succeeded without current evidence.
+The AWS public IP used for this demonstration was `15.206.117.49`; it is historical and no longer identifies a running deployment. This run verifies a deployment and short health check, not a long-duration production workload.
 
 # 9. INT378 Course Outcomes and Practical Alignment
 
@@ -196,7 +193,7 @@ The project covers several practical themes through Docker/Docker Hub, Terraform
 
 # 10. Conclusion and Future Work
 
-CloudNotes combines a working CRUD application with container packaging, declarative infrastructure, Kubernetes orchestration, Jenkins delivery automation, security scanning, and metrics-based operations. Its strongest educational value is the connected workflow: source changes become tested and scanned images, those images are deployed as Kubernetes workloads, and application behavior can be observed through Prometheus and Grafana.
+CloudNotes combines a working CRUD application with container packaging, declarative infrastructure, Kubernetes orchestration, Jenkins delivery automation, security scanning, and metrics-based operations. In the recorded AWS run, Jenkins build #2 successfully deployed the application, the frontend and API health endpoints returned HTTP 200 through the host-routed Ingress, and Terraform destroyed all 14 managed resources afterward. This is a verified demonstration run, not an always-on service or a production availability claim.
 
 Recommended future work, aligned with INT378, includes IAM roles and MFA, application authentication and authorization, TLS and private network boundaries, CloudFormation comparison, managed secrets, Node Exporter and infrastructure dashboards, AWS Budgets/Cost Explorer analysis, a serverless extension, governance/compliance checks, database backups, a multi-node/multi-AZ cluster, blocking vulnerability policies, and repeatable load/scaling evidence.
 

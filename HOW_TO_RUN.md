@@ -6,7 +6,7 @@ This guide describes the repository's local Compose, Kubernetes, and AWS workflo
 
 - Docker Desktop or Docker Engine with Compose
 - For Kubernetes: `kubectl`, Minikube (or another cluster), an ingress controller, and KEDA for the traffic-based `ScaledObject` resources
-- For AWS: Terraform, AWS credentials, a valid provisioning SSH key supplied as `ssh_public_key`, and a dedicated Jenkins deploy key pair
+- For AWS: Terraform, AWS credentials, a valid provisioning SSH key supplied as `ssh_public_key`, and a Jenkins host that can generate its dedicated deploy key
 - For CI/CD: a Jenkins host configured from `jenkins/jenkins.yaml`, Docker Hub credentials, an SSH key credential for the app host, and a GitHub webhook to Jenkins
 
 ## Local development with Docker Compose
@@ -87,9 +87,21 @@ The Terraform configuration creates a VPC and public subnet, security groups, an
 
    Public IPs are dynamic and may differ from historical documentation. Terraform bootstraps the infrastructure and cluster; CloudNotes becomes available only after the Kubernetes manifests and application images are deployed successfully. Repository files alone do not prove that a live endpoint is running.
 
+   The Ingress routes by host name `cloudnotes.local`, so include that Host header when checking the public IP directly:
+
+   ```powershell
+   $appIp = (terraform -chdir=terraform output -raw app_public_ip).Trim()
+   $headers = @{ Host = 'cloudnotes.local' }
+   Invoke-WebRequest -Uri "http://$appIp/" -Headers $headers
+   Invoke-RestMethod -Uri "http://$appIp/api/health" -Headers $headers
+   Invoke-RestMethod -Uri "http://$appIp/api/notes" -Headers $headers
+   ```
+
+   A request without the `cloudnotes.local` Host header reaches the Ingress default backend and can return HTTP 404 even when the application is healthy.
+
 ## Jenkins delivery pipeline
 
-The root `Jenkinsfile` defines checkout, backend image/test execution, TruffleHog secret scanning, Docker image builds, Trivy scanning, Docker Hub publication, and deployment by SSH to the K3s app host. It uses a GitHub push trigger. The startup script configures `dockerhub-credentials` and `app-server-ssh-key` from the ignored secret files and dedicated Jenkins key pair; manual Jenkins setup must create credentials with those IDs.
+The root `Jenkinsfile` defines checkout, backend image/test execution, TruffleHog secret scanning, Docker image builds, Trivy scanning, Docker Hub publication, and deployment by SSH to the K3s app host. It uses a GitHub push trigger. The startup script configures `dockerhub-credentials` from the ignored Docker Hub password file and `app-server-ssh-key` from a dedicated key generated on the Jenkins host; manual Jenkins setup must create credentials with those IDs.
 
 The Jenkins pipeline uses a configured `APP_SERVER_IP`; update it for the current app host through the project automation or Jenkins configuration before triggering a deployment. Use immutable build-number image tags to identify a release; `latest` is also pushed for convenience.
 
