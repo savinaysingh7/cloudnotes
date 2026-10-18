@@ -52,7 +52,7 @@ with app.app_context():
         columns = [c['name'] for c in inspector.get_columns('note')]
         if 'created_at' not in columns:
             db.session.execute(text(
-                'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT NOW()'
+                'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
             ))
             db.session.commit()
     except Exception:
@@ -65,6 +65,13 @@ def metrics_endpoint():
 @app.route('/api/health')
 def health():
     return jsonify({"status": "ok"})
+
+def serialize_created_at(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).isoformat()
+    return dt.isoformat()
 
 @app.route('/api/notes', methods=['GET'])
 def get_notes():
@@ -79,7 +86,7 @@ def get_notes():
         "id": n.id,
         "title": n.title,
         "body": n.body,
-        "created_at": n.created_at.isoformat() + 'Z' if n.created_at else None
+        "created_at": serialize_created_at(n.created_at)
     } for n in notes])
 
 @app.route('/api/notes', methods=['POST'])
@@ -95,7 +102,7 @@ def create_note():
 
 @app.route('/api/notes/<int:note_id>', methods=['PUT'])
 def update_note(note_id):
-    note = Note.query.get_or_404(note_id)
+    note = db.get_or_404(Note, note_id)
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -107,7 +114,7 @@ def update_note(note_id):
 
 @app.route('/api/notes/<int:note_id>', methods=['DELETE'])
 def delete_note(note_id):
-    note = Note.query.get_or_404(note_id)
+    note = db.get_or_404(Note, note_id)
     db.session.delete(note)
     db.session.commit()
     notes_deleted_counter.inc()

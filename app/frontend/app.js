@@ -34,8 +34,10 @@ function showToast(message, type = 'success') {
 function formatTime(isoString) {
     if (!isoString) return '';
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
     const now = new Date();
     const diffMs = now - date;
+    if (diffMs < 0) return 'Just now';
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
@@ -75,17 +77,43 @@ async function loadNotes(search = '') {
         notes.forEach(note => {
             const noteElement = document.createElement('div');
             noteElement.className = 'note-item';
-            noteElement.innerHTML = `
-                <h3>${escapeHtml(note.title)}</h3>
-                <p>${escapeHtml(note.body)}</p>
-                <div class="note-meta">
-                    <span class="note-time">${formatTime(note.created_at)}</span>
-                    <div class="note-actions">
-                        <button class="btn btn-edit" onclick="openEditModal(${note.id}, '${escapeAttr(note.title)}', '${escapeAttr(note.body)}')">Edit</button>
-                        <button class="btn btn-delete" onclick="deleteNote(${note.id})">Delete</button>
-                    </div>
-                </div>
-            `;
+
+            const titleEl = document.createElement('h3');
+            titleEl.textContent = note.title;
+
+            const bodyEl = document.createElement('p');
+            bodyEl.textContent = note.body;
+
+            const metaEl = document.createElement('div');
+            metaEl.className = 'note-meta';
+
+            const timeEl = document.createElement('span');
+            timeEl.className = 'note-time';
+            timeEl.textContent = formatTime(note.created_at);
+
+            const actionsEl = document.createElement('div');
+            actionsEl.className = 'note-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-edit';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => openEditModal(note.id, note.title, note.body));
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-delete';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.addEventListener('click', () => deleteNote(note.id));
+
+            actionsEl.appendChild(editBtn);
+            actionsEl.appendChild(deleteBtn);
+
+            metaEl.appendChild(timeEl);
+            metaEl.appendChild(actionsEl);
+
+            noteElement.appendChild(titleEl);
+            noteElement.appendChild(bodyEl);
+            noteElement.appendChild(metaEl);
+
             notesList.appendChild(noteElement);
         });
     } catch (error) {
@@ -93,16 +121,6 @@ async function loadNotes(search = '') {
         showToast('Failed to load notes', 'error');
     }
     showLoading(false);
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function escapeAttr(text) {
-    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
 }
 
 async function addNote() {
