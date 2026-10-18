@@ -66,9 +66,11 @@ if (appSshKeyPassphrase == null) {
 }
 if (appSshKeyPassphrase != null) {
     appSshKeyPassphrase = appSshKeyPassphrase.replaceFirst(/[\r\n]+$/, '')
+} else {
+    appSshKeyPassphrase = ''
 }
 
-if (!dockerHubPassword || !appSshPrivateKey || appSshKeyPassphrase == null) {
+if (!dockerHubPassword || !appSshPrivateKey) {
     println '[cloudnotes-creds] Secret files are not present yet; credential injection skipped.'
 } else {
     def upsertCredential = { credential ->

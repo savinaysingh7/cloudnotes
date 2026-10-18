@@ -14,11 +14,12 @@ jenkins:
 
 unclassified:
   location:
-    url: "http://REPLACE_ME_JENKINS_IP:8080/"
+    url: "http://localhost:8080/"
 
 jobs:
   - script: >
       pipelineJob('CloudNotes-Pipeline') {
+        description('Automated CloudNotes delivery pipeline: Code -> Test -> Scan -> Build -> Push -> Deploy.')
         definition {
           cpsScm {
             scm {
@@ -26,9 +27,25 @@ jobs:
                 remote {
                   url('https://github.com/savinaysingh7/cloudnotes.git')
                 }
-                branches('main')
+                branches('*/main')
               }
             }
           }
+        }
+      }
+
+      listView('CloudNotes') {
+        description('Focused dashboard for the disposable CloudNotes CI/CD demo.')
+        jobs {
+          name('CloudNotes-Pipeline')
+        }
+        columns {
+          status()
+          weather()
+          name()
+          lastSuccess()
+          lastFailure()
+          lastDuration()
+          buildButton()
         }
       }

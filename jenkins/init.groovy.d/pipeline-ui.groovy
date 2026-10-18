@@ -37,3 +37,15 @@ try {
 } catch (Throwable t) {
     println "[cloudnotes-pipeline-ui] Pipeline visualization defaults failed: ${t.class.simpleName}: ${t.message}"
 }
+
+try {
+    def jenkinsInstance = Jenkins.get()
+    def cloudNotesView = jenkinsInstance.getView('CloudNotes')
+    if (cloudNotesView != null && jenkinsInstance.primaryView?.viewName != 'CloudNotes') {
+        jenkinsInstance.setPrimaryView(cloudNotesView)
+        jenkinsInstance.save()
+        println '[cloudnotes-pipeline-ui] CloudNotes set as the default Jenkins view.'
+    }
+} catch (Throwable t) {
+    println "[cloudnotes-pipeline-ui] Default view configuration failed: ${t.class.simpleName}: ${t.message}"
+}
