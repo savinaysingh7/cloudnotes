@@ -2,10 +2,13 @@
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 .env
 venv/
 *.egg-info/
 notes.db
+instance/
+tmp/
 
 # Terraform
 *.tfstate
@@ -14,7 +17,7 @@ notes.db
 *.tfvars
 
 # Docker
-.dockerignore
+# (.dockerignore files tracked)
 
 # OS
 .DS_Store

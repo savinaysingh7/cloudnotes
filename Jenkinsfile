@@ -50,13 +50,13 @@ pipeline {
                     scan_status=$?
                     set -e
 
-                    if [ "$scan_status" -ne 0 ] && [ "$scan_status" -ne 183 ]; then
-                        exit "$scan_status"
-                    fi
-
-                    if [ -s trufflehog.json ]; then
+                    if [ "$scan_status" -eq 183 ] || [ -s trufflehog.json ]; then
+                        echo "Verified secrets detected by TruffleHog:"
                         cat trufflehog.json
                         exit 1
+                    elif [ "$scan_status" -ne 0 ]; then
+                        echo "TruffleHog execution failed with exit code $scan_status"
+                        exit "$scan_status"
                     fi
 
                     echo "No verified secrets found - OK"
@@ -163,14 +163,3 @@ REMOTE_DEPLOY
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-

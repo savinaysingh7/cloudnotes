@@ -43,6 +43,7 @@ module "jenkins_ec2" {
                 # Update Jenkins URL in yaml
                 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
                 sed -i "s/REPLACE_ME_JENKINS_IP/$PUBLIC_IP/g" /opt/jenkins/jenkins.yaml
+                sed -i "s#http://localhost:8080/#http://$PUBLIC_IP:8080/#g" /opt/jenkins/jenkins.yaml
 
                 # Build custom Jenkins image with plugins
                 cd /tmp/repo/jenkins

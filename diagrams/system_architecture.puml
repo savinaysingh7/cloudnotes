@@ -19,7 +19,10 @@ node "AWS" {
   }
   folder "S3 Bucket" as s3
 }
-component "Grafana Live Dashboard" as grafana
+node "Local Environment (Docker Compose)" {
+  component "Local Prometheus" as local_prom
+  component "Grafana Dashboard" as grafana
+}
 User --> ingress : HTTP/HTTPS
 ingress --> frontend
 ingress --> backend : /api
@@ -27,7 +30,8 @@ frontend --> backend : REST requests
 backend --> postgres : SQL
 backend --> prometheus : /metrics
 prometheus --> keda : request-rate query
-prometheus --> grafana : metrics
+keda --> backend : autoscale (2-5 pods)
+local_prom --> grafana : PromQL metrics
 github --> jenkins : push webhook
 jenkins --> registry : push images
 jenkins --> ingress : apply manifests / rollout
