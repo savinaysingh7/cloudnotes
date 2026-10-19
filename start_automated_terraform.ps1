@@ -495,7 +495,12 @@ done
 echo "Notice: Could not acquire Jenkins job within timeout; verify pipeline status via web UI."
 '@
 try {
-    Invoke-Remote -HostName $JENKINS_IP -Command $triggerScript
+    $cleanTrigger = $triggerScript.Replace("`r`n", "`n").Replace("`r", "`n")
+    $tempTriggerFile = Join-Path ([System.IO.Path]::GetTempPath()) ("trigger-" + [guid]::NewGuid().ToString("N") + ".sh")
+    [System.IO.File]::WriteAllText($tempTriggerFile, $cleanTrigger, $Utf8NoBom)
+    Copy-ToRemote -HostName $JENKINS_IP -LocalPath $tempTriggerFile -RemotePath "/tmp/trigger_pipeline.sh"
+    Invoke-Remote -HostName $JENKINS_IP -Command "bash /tmp/trigger_pipeline.sh && rm -f /tmp/trigger_pipeline.sh"
+    Remove-Item -LiteralPath $tempTriggerFile -Force -ErrorAction SilentlyContinue
 } catch {
     Write-Warning "Could not trigger Jenkins pipeline automatically: $($_.Exception.Message)"
 }
@@ -547,26 +552,38 @@ try {
     Write-Warning "   [WARN] Jenkins direct access check failed: $($_.Exception.Message)"
 }
 
-try {
-    $gResp = Invoke-WebRequest -Uri "http://$($APP_IP):3001/" -UseBasicParsing -TimeoutSec 5
-    if ($gResp.StatusCode -eq 200) {
-        Write-Host "   [OK] Grafana: Passwordless direct access verified (HTTP 200, Anonymous Admin)"
-    } else {
-        Write-Warning "   [WARN] Grafana returned status $($gResp.StatusCode)"
+$grafanaReady = $false
+for ($gAttempt = 1; $gAttempt -le 12; $gAttempt++) {
+    try {
+        $gResp = Invoke-WebRequest -Uri "http://$($APP_IP):3001/" -UseBasicParsing -TimeoutSec 5
+        if ($gResp.StatusCode -eq 200) {
+            $grafanaReady = $true
+            Write-Host "   [OK] Grafana: Passwordless direct access verified (HTTP 200, Anonymous Admin)"
+            break
+        }
+    } catch {
+        Start-Sleep -Seconds 5
     }
-} catch {
-    Write-Warning "   [WARN] Grafana direct access check failed: $($_.Exception.Message)"
+}
+if (-not $grafanaReady) {
+    Write-Warning "   [WARN] Grafana was not accessible within timeout on port 3001"
 }
 
-try {
-    $pResp = Invoke-WebRequest -Uri "http://$($APP_IP):9091/-/ready" -UseBasicParsing -TimeoutSec 5
-    if ($pResp.StatusCode -eq 200) {
-        Write-Host "   [OK] Prometheus: Passwordless direct access verified (HTTP 200)"
-    } else {
-        Write-Warning "   [WARN] Prometheus returned status $($pResp.StatusCode)"
+$promReady = $false
+for ($pAttempt = 1; $pAttempt -le 6; $pAttempt++) {
+    try {
+        $pResp = Invoke-WebRequest -Uri "http://$($APP_IP):9091/-/ready" -UseBasicParsing -TimeoutSec 5
+        if ($pResp.StatusCode -eq 200) {
+            $promReady = $true
+            Write-Host "   [OK] Prometheus: Passwordless direct access verified (HTTP 200)"
+            break
+        }
+    } catch {
+        Start-Sleep -Seconds 5
     }
-} catch {
-    Write-Warning "   [WARN] Prometheus direct access check failed: $($_.Exception.Message)"
+}
+if (-not $promReady) {
+    Write-Warning "   [WARN] Prometheus was not accessible within timeout on port 9091"
 }
 
 Write-Host "========================================="
