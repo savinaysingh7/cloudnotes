@@ -71,7 +71,7 @@ See [HOW_TO_RUN.md](HOW_TO_RUN.md) for Kubernetes and AWS instructions, environm
 
 - **Compose:** intended for local development and demonstration.
 - **Kubernetes / Minikube:** applies the manifests in `kubernetes/`; install an ingress controller and KEDA first when using the ingress and ScaledObjects.
-- **AWS:** Terraform provisions EC2 hosts and related infrastructure; `start_mumbai.bat` orchestrates provisioning and setup. Read the run guide and inspect Terraform plan, costs, and security-group exposure before applying.
+- **AWS:** Terraform provisions EC2 hosts and related infrastructure. `start_mumbai.bat` runs a fully automated zero-touch lifecycle: auto-detects operator public IP, auto-generates SSH keys if not present, provisions infrastructure via Terraform, bootstraps K3s and Jenkins JCasC, injects credentials, triggers the CI/CD pipeline, and verifies application health. `stop_mumbai.bat` safely destroys infrastructure on demand with user confirmation. See [HOW_TO_RUN.md](HOW_TO_RUN.md) for details.
 
 To inspect current AWS endpoints after provisioning, run `terraform -chdir=terraform output`. Do not rely on IPs copied into older reports; public EC2 addresses can change.
 

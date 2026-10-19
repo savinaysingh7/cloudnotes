@@ -2,10 +2,13 @@ import requests
 import json
 import time
 
-JENKINS_URL = "http://3.6.90.59:8080"
-JOB_NAME = "CloudNotes-Pipeline"
-USER = "admin"
-PASSWORD = "CHANGE_ME"
+import sys
+import os
+
+JENKINS_URL = sys.argv[1] if len(sys.argv) > 1 else os.getenv("JENKINS_URL", "http://3.6.90.59:8080")
+JOB_NAME = os.getenv("JENKINS_JOB_NAME", "CloudNotes-Pipeline")
+USER = os.getenv("JENKINS_USER", "admin")
+PASSWORD = os.getenv("JENKINS_PASSWORD", "CHANGE_ME")
 
 def trigger_build():
     session = requests.Session()

@@ -141,7 +141,7 @@ module "app_ec2" {
                 sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm repo add kedacore https://kedacore.github.io/charts
                 sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
                 sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm repo update
-                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm upgrade --install keda kedacore/keda --namespace keda --create-namespace
+                sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm upgrade --install keda kedacore/keda --namespace keda --create-namespace --set operator.livenessProbe.timeoutSeconds=10 --set operator.livenessProbe.failureThreshold=5 --set operator.readinessProbe.timeoutSeconds=10 --set operator.readinessProbe.failureThreshold=5
                 sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
                 EOF
 }

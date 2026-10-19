@@ -103,7 +103,11 @@ pipeline {
                             sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG}"
                             sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
                         } else {
-                            echo "Docker Hub authentication skipped (placeholder credentials); local image build preserved."
+                            echo "Docker Hub authentication skipped (placeholder credentials); transferring built images directly to Kubernetes node..."
+                            sshagent(credentials: ['app-server-ssh-key']) {
+                                sh "docker save ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} | ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'sudo k3s ctr images import -'"
+                                sh "docker save ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} | ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'sudo k3s ctr images import -'"
+                            }
                         }
                     }
                 }

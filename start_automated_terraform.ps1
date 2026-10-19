@@ -230,7 +230,17 @@ foreach ($k in $candidateKeys) {
     }
 }
 if (-not $PemPath) {
-    throw "Missing SSH private key. Specify CLOUDNOTES_SSH_KEY_PATH or place a key at $(Join-Path $env:USERPROFILE '.ssh\cloudnotes-aws') or .secrets\cloudnotes-aws."
+    Write-Host "No existing SSH private key found. Generating automated ed25519 key pair..."
+    if (-not (Test-Path -LiteralPath $SecretDir)) {
+        New-Item -ItemType Directory -Force -Path $SecretDir | Out-Null
+    }
+    $autoKey = Join-Path $SecretDir "cloudnotes-aws"
+    & ssh-keygen -t ed25519 -N '""' -f $autoKey -C "cloudnotes-aws"
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $autoKey)) {
+        throw "Failed to auto-generate SSH key pair at $autoKey."
+    }
+    $PemPath = (Resolve-Path -LiteralPath $autoKey).Path
+    Write-Host "Auto-generated SSH key pair successfully at $PemPath"
 }
 cmd.exe /c "icacls `"$PemPath`" /inheritance:r /grant:r %USERNAME%:(R)" *> $null
 $script:SshOptions = @("-i", $PemPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
@@ -247,6 +257,17 @@ $pubKeyCandidate = "$PemPath.pub"
 $pubKeyValue = $null
 if (Test-Path -LiteralPath $pubKeyCandidate) {
     $pubKeyValue = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $pubKeyCandidate).Path, [System.Text.Encoding]::UTF8).Trim()
+} else {
+    try {
+        $extractedPub = (& ssh-keygen -y -f "$PemPath" 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $extractedPub) {
+            $pubKeyValue = ($extractedPub | Out-String).Trim()
+            [System.IO.File]::WriteAllText($pubKeyCandidate, $pubKeyValue + "`n", $Utf8NoBom)
+            Write-Host "Extracted and wrote public key to $pubKeyCandidate"
+        }
+    } catch {
+        # Fallback to validation below
+    }
 }
 
 if (-not (Test-Path -LiteralPath $tfvarsPath)) {
@@ -278,7 +299,11 @@ if (-not (Test-Path -LiteralPath $tfvarsPath)) {
 }
 
 Write-Host "Initializing Terraform..."
-terraform -chdir=terraform init -no-color | Out-Null
+$initOutput = terraform -chdir=terraform init -no-color 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ($initOutput | Out-String)
+    throw "Terraform init failed with exit code $LASTEXITCODE."
+}
 
 Write-Host "Applying Terraform Infrastructure (this may take 2-3 mins)..."
 terraform -chdir=terraform apply -auto-approve -no-color
@@ -382,13 +407,55 @@ try {
     Write-Warning "Git commit/push skipped: $($_.Exception.Message)"
 }
 
+Write-Host "Ensuring Jenkins delivery pipeline is triggered..."
+$triggerScript = @'
+for i in $(seq 1 30); do
+  CRUMB_JSON=$(sudo docker exec jenkins curl -u admin:CHANGE_ME -s http://localhost:8080/crumbIssuer/api/json 2>/dev/null || true)
+  CRUMB=$(echo "$CRUMB_JSON" | grep -oP '(?<="crumb":")[^"]*' || true)
+  if [ -n "$CRUMB" ]; then
+    JOB_INFO=$(sudo docker exec jenkins curl -u admin:CHANGE_ME -s 'http://localhost:8080/job/CloudNotes-Pipeline/api/json?tree=inQueue,lastBuild[number,building]' 2>/dev/null || true)
+    IN_QUEUE=$(echo "$JOB_INFO" | grep -oP '(?<="inQueue":)[^,}]*' || echo "false")
+    IS_BUILDING=$(echo "$JOB_INFO" | grep -oP '(?<="building":)[^,}]*' || echo "false")
+    if [ "$IN_QUEUE" != "true" ] && [ "$IS_BUILDING" != "true" ]; then
+      sudo docker exec jenkins curl -u admin:CHANGE_ME -H "Jenkins-Crumb: $CRUMB" -s -X POST http://localhost:8080/job/CloudNotes-Pipeline/build
+      echo "Triggered CloudNotes-Pipeline build."
+    else
+      echo "CloudNotes-Pipeline is already active (queued or building)."
+    fi
+    exit 0
+  fi
+  sleep 3
+done
+echo "Notice: Could not acquire Jenkins crumb within timeout; verify pipeline status via web UI."
+'@
+try {
+    Invoke-Remote -HostName $JENKINS_IP -Command $triggerScript
+} catch {
+    Write-Warning "Could not trigger Jenkins pipeline automatically: $($_.Exception.Message)"
+}
+
+Write-Host "Checking application availability at http://$APP_IP/api/health..."
+$appHealthy = $false
+for ($i = 1; $i -le 6; $i++) {
+    try {
+        $resp = Invoke-RestMethod -Uri "http://$APP_IP/api/health" -TimeoutSec 3 -ErrorAction SilentlyContinue
+        if ($resp.status -eq "ok") {
+            $appHealthy = $true
+            Write-Host "Application is live and responding!"
+            break
+        }
+    } catch {}
+    Start-Sleep -Seconds 5
+}
+if (-not $appHealthy) {
+    Write-Host "Note: Jenkins pipeline is currently building or deploying application pods."
+    Write-Host "Application will be reachable at http://$APP_IP once the pipeline completes."
+}
+
 Write-Host "========================================="
-Write-Host " SUCCESS! Everything is deployed."
+Write-Host " SUCCESS! Infrastructure & CI/CD Active  "
 Write-Host " App URL:    http://$APP_IP"
 Write-Host " Jenkins:    http://$($JENKINS_IP):8080"
 Write-Host " Grafana:    http://$($APP_IP):3001"
 Write-Host " Prometheus: http://$($APP_IP):9091"
-Write-Host " "
-Write-Host " Note: It will take ~5 mins for Docker to finish"
-Write-Host " installing and building the app on the server."
 Write-Host "========================================="

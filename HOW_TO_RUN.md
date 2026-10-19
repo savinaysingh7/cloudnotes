@@ -77,7 +77,14 @@ The Terraform configuration creates a VPC and public subnet, security groups, an
    terraform -chdir=terraform apply
    ```
 
-   `start_mumbai.bat` runs `start_automated_terraform.ps1`, which applies Terraform without prompting, configures Jenkins, updates a GitHub webhook, and may commit and push the Jenkinsfile. Before using it, create `.secrets/github_token.txt` and `.secrets/dockerhub_password.txt`; these files are ignored by Git. The script uses `%USERPROFILE%\.ssh\cloudnotes-aws` by default for your provisioning connection. The Jenkins EC2 host generates and keeps its own dedicated deployment key; the start script registers only its public key on the app host. The private CI key is not copied from the workstation. Load the provisioning key in the Windows SSH agent before starting the script. The GitHub webhook and Jenkinsfile commit remain in GitHub after AWS teardown.
+   `start_mumbai.bat` provides a 100% automated zero-touch deployment workflow by invoking `start_automated_terraform.ps1`:
+   - **SSH Key Automation**: Automatically searches for existing keys in candidate paths (`CLOUDNOTES_SSH_KEY_PATH`, `.secrets/cloudnotes-aws`, `~/.ssh/cloudnotes-aws`); if none exist, it automatically generates a new ed25519 key pair in `.secrets/cloudnotes-aws` and secures file permissions.
+   - **IP Detection & Config**: Queries AWS checkip to auto-detect operator public IP and generates/updates `terraform/terraform.tfvars` with current `admin_cidr` and `ssh_public_key`.
+   - **Infrastructure Provisioning**: Executes `terraform init` and `terraform apply -auto-approve` without prompting.
+   - **Cross-Host Key Registration**: Jenkins EC2 generates its own isolated deployment key in user_data; `start_mumbai.bat` retrieves its public key and registers it into the App EC2 host's `authorized_keys`.
+   - **Jenkins JCasC & Credentials**: Injects Docker Hub and SSH credentials into Jenkins, updates GitHub webhook (if `CLOUDNOTES_GITHUB_TOKEN` is supplied), and commits/pushes updated IP configurations.
+   - **Pipeline Execution**: Automatically verifies and triggers the `CloudNotes-Pipeline` build on Jenkins via API, so the full delivery cycle (tests, TruffleHog scan, Docker build/push, Kubernetes deployment) begins immediately without manual intervention.
+   - **Health Verification & Output**: Polls application health (`/api/health`) and displays the live endpoint URLs (App, Jenkins, Grafana, Prometheus).
 
 6. Retrieve current host addresses with:
 
