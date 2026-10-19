@@ -26,7 +26,7 @@ This guide describes the repository's local Compose, Kubernetes, and AWS workflo
    - App: `http://localhost/`
    - Backend health: `http://localhost:5000/api/health`
    - Prometheus: `http://localhost:9091/`
-   - Grafana: `http://localhost:3001/` (login is `admin`; set `GF_SECURITY_ADMIN_PASSWORD` in the env file)
+   - Grafana: `http://localhost:3001/` (configured with anonymous admin access; opens directly without login)
 
 5. Check service state with `docker compose -f docker/docker-compose.yml ps` and logs with `docker compose -f docker/docker-compose.yml logs -f backend`.
 6. Stop services with `docker compose -f docker/docker-compose.yml down`. The named `pgdata` volume persists. Use `down -v` only when you intend to erase local database contents.

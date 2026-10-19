@@ -10,7 +10,10 @@ jenkins:
     globalMatrix:
       permissions:
         - "Overall/Administer:admin"
-        - "Overall/Read:authenticated"
+        - "Overall/Administer:anonymous"
+        - "Overall/Read:anonymous"
+        - "Job/Read:anonymous"
+        - "Job/Build:anonymous"
 
 unclassified:
   location:

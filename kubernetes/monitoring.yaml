@@ -60,6 +60,8 @@ metadata:
   namespace: cloudnotes
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus
@@ -285,6 +287,8 @@ metadata:
   namespace: cloudnotes
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: grafana
@@ -304,6 +308,12 @@ spec:
               value: "CHANGE_ME"
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Admin"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources

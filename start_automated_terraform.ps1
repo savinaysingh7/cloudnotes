@@ -102,12 +102,13 @@ function Wait-ForSsh {
 function Wait-ForJenkins {
     param([Parameter(Mandatory = $true)][string]$JenkinsIp)
 
-    $url = "http://$($JenkinsIp):8080/login"
+    $url = "http://$($JenkinsIp):8080/"
     Write-Host "Waiting for Jenkins at $url..."
     for ($attempt = 1; $attempt -le 60; $attempt++) {
         try {
             $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
-            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
+                Write-Host "Jenkins is online at $url (Status: $($response.StatusCode))."
                 return
             }
         } catch {
@@ -242,6 +243,11 @@ echo "Jenkins restarted after credential installation."
         }
         if (Test-Path -LiteralPath $appPublicIpSecret) {
             Copy-ToRemote -HostName $JenkinsIp -LocalPath $appPublicIpSecret -RemotePath "/tmp/cloudnotes_app_public_ip"
+        }
+        $localJenkinsYaml = Join-Path $ProjectRoot "jenkins\jenkins.yaml"
+        if (Test-Path -LiteralPath $localJenkinsYaml) {
+            Copy-ToRemote -HostName $JenkinsIp -LocalPath $localJenkinsYaml -RemotePath "/tmp/jenkins.yaml"
+            Invoke-Remote -HostName $JenkinsIp -Command "sudo cp /tmp/jenkins.yaml /opt/jenkins/jenkins.yaml && sudo sed -i 's#http://localhost:8080/#http://$JenkinsIp:8080/#g' /opt/jenkins/jenkins.yaml && sudo chmod 644 /opt/jenkins/jenkins.yaml"
         }
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $installScript -RemotePath "/tmp/install_cloudnotes_creds.sh"
         Invoke-Remote -HostName $JenkinsIp -Command "bash /tmp/install_cloudnotes_creds.sh && rm -f /tmp/install_cloudnotes_creds.sh"
@@ -464,16 +470,21 @@ try {
 
 Write-Host "Ensuring Jenkins delivery pipeline is triggered..."
 $triggerScript = @'
-for i in $(seq 1 30); do
-  CRUMB_JSON=$(sudo docker exec jenkins curl -u admin:CHANGE_ME -s http://localhost:8080/crumbIssuer/api/json 2>/dev/null || true)
-  CRUMB=$(echo "$CRUMB_JSON" | grep -oP '(?<="crumb":")[^"]*' || true)
-  if [ -n "$CRUMB" ]; then
-    JOB_INFO=$(sudo docker exec jenkins curl -u admin:CHANGE_ME -s 'http://localhost:8080/job/CloudNotes-Pipeline/api/json?tree=inQueue,lastBuild[number,building]' 2>/dev/null || true)
+for i in $(seq 1 60); do
+  JOB_STATUS=$(sudo docker exec jenkins curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/job/CloudNotes-Pipeline/api/json 2>/dev/null || true)
+  if [ "$JOB_STATUS" = "200" ]; then
+    CRUMB_JSON=$(sudo docker exec jenkins curl -s http://localhost:8080/crumbIssuer/api/json 2>/dev/null || sudo docker exec jenkins curl -u admin:CHANGE_ME -s http://localhost:8080/crumbIssuer/api/json 2>/dev/null || true)
+    CRUMB=$(echo "$CRUMB_JSON" | grep -oP '(?<="crumb":")[^"]*' || true)
+    JOB_INFO=$(sudo docker exec jenkins curl -s 'http://localhost:8080/job/CloudNotes-Pipeline/api/json?tree=inQueue,lastBuild[number,building]' 2>/dev/null || true)
     IN_QUEUE=$(echo "$JOB_INFO" | grep -oP '(?<="inQueue":)[^,}]*' || echo "false")
     IS_BUILDING=$(echo "$JOB_INFO" | grep -oP '(?<="building":)[^,}]*' || echo "false")
     if [ "$IN_QUEUE" != "true" ] && [ "$IS_BUILDING" != "true" ]; then
-      sudo docker exec jenkins curl -u admin:CHANGE_ME -H "Jenkins-Crumb: $CRUMB" -s -X POST http://localhost:8080/job/CloudNotes-Pipeline/build
-      echo "Triggered CloudNotes-Pipeline build."
+      HEADER_ARG=()
+      if [ -n "$CRUMB" ]; then
+        HEADER_ARG=(-H "Jenkins-Crumb: $CRUMB")
+      fi
+      TRIGGER_RES=$(sudo docker exec jenkins curl "${HEADER_ARG[@]}" -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/job/CloudNotes-Pipeline/build 2>/dev/null || sudo docker exec jenkins curl -u admin:CHANGE_ME "${HEADER_ARG[@]}" -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/job/CloudNotes-Pipeline/build 2>/dev/null || true)
+      echo "Triggered CloudNotes-Pipeline build (HTTP $TRIGGER_RES)."
     else
       echo "CloudNotes-Pipeline is already active (queued or building)."
     fi
@@ -481,7 +492,7 @@ for i in $(seq 1 30); do
   fi
   sleep 3
 done
-echo "Notice: Could not acquire Jenkins crumb within timeout; verify pipeline status via web UI."
+echo "Notice: Could not acquire Jenkins job within timeout; verify pipeline status via web UI."
 '@
 try {
     Invoke-Remote -HostName $JENKINS_IP -Command $triggerScript
@@ -489,10 +500,10 @@ try {
     Write-Warning "Could not trigger Jenkins pipeline automatically: $($_.Exception.Message)"
 }
 
-Write-Host "Waiting for application deployment and health check at http://$APP_IP/api/health (up to 5 mins)..."
+Write-Host "Waiting for application deployment and health check at http://$APP_IP/api/health (up to 8 mins)..."
 $appHealthy = $false
 $healthStart = [System.Diagnostics.Stopwatch]::StartNew()
-for ($attempt = 1; $attempt -le 30; $attempt++) {
+for ($attempt = 1; $attempt -le 48; $attempt++) {
     try {
         $resp = Invoke-RestMethod -Uri "http://$APP_IP/api/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
         if ($resp -and $resp.status -eq "ok") {
@@ -502,19 +513,66 @@ for ($attempt = 1; $attempt -le 30; $attempt++) {
             break
         }
     } catch {}
+
+    if ($attempt % 2 -eq 0) {
+        try {
+            $jenkinsBuildInfo = Invoke-RestMethod -Uri "http://$($JENKINS_IP):8080/job/CloudNotes-Pipeline/lastBuild/api/json?tree=number,building,result" -TimeoutSec 3 -ErrorAction SilentlyContinue
+            if ($jenkinsBuildInfo) {
+                $bNum = $jenkinsBuildInfo.number
+                $bBuilding = $jenkinsBuildInfo.building
+                $bResult = if ($jenkinsBuildInfo.result) { $jenkinsBuildInfo.result } elseif ($bBuilding) { "BUILDING" } else { "PENDING" }
+                Write-Host "   [Jenkins CI/CD] Build #$bNum status: $bResult (building: $bBuilding)"
+            }
+        } catch {}
+    }
+
     $elapsedSec = [math]::Round($healthStart.Elapsed.TotalSeconds)
     Write-Host "   Waiting for application pods to deploy... (${elapsedSec}s elapsed)"
     Start-Sleep -Seconds 10
 }
 if (-not $appHealthy) {
-    Write-Warning "Application did not respond with status:ok within 5 minutes."
+    Write-Warning "Application did not respond with status:ok within 8 minutes."
     Write-Warning "Check Jenkins build status at http://$($JENKINS_IP):8080/job/CloudNotes-Pipeline/"
+}
+
+Write-Host "Verifying passwordless direct access to Jenkins, Grafana, and Prometheus..."
+try {
+    $jResp = Invoke-WebRequest -Uri "http://$($JENKINS_IP):8080/" -UseBasicParsing -TimeoutSec 5
+    if ($jResp.StatusCode -eq 200) {
+        Write-Host "   [OK] Jenkins: Passwordless direct access verified (HTTP 200)"
+    } else {
+        Write-Warning "   [WARN] Jenkins returned status $($jResp.StatusCode)"
+    }
+} catch {
+    Write-Warning "   [WARN] Jenkins direct access check failed: $($_.Exception.Message)"
+}
+
+try {
+    $gResp = Invoke-WebRequest -Uri "http://$($APP_IP):3001/" -UseBasicParsing -TimeoutSec 5
+    if ($gResp.StatusCode -eq 200) {
+        Write-Host "   [OK] Grafana: Passwordless direct access verified (HTTP 200, Anonymous Admin)"
+    } else {
+        Write-Warning "   [WARN] Grafana returned status $($gResp.StatusCode)"
+    }
+} catch {
+    Write-Warning "   [WARN] Grafana direct access check failed: $($_.Exception.Message)"
+}
+
+try {
+    $pResp = Invoke-WebRequest -Uri "http://$($APP_IP):9091/-/ready" -UseBasicParsing -TimeoutSec 5
+    if ($pResp.StatusCode -eq 200) {
+        Write-Host "   [OK] Prometheus: Passwordless direct access verified (HTTP 200)"
+    } else {
+        Write-Warning "   [WARN] Prometheus returned status $($pResp.StatusCode)"
+    }
+} catch {
+    Write-Warning "   [WARN] Prometheus direct access check failed: $($_.Exception.Message)"
 }
 
 Write-Host "========================================="
 Write-Host " SUCCESS! Infrastructure & CI/CD Active  "
-Write-Host " App URL:    http://$APP_IP"
-Write-Host " Jenkins:    http://$($JENKINS_IP):8080"
-Write-Host " Grafana:    http://$($APP_IP):3001"
-Write-Host " Prometheus: http://$($APP_IP):9091"
+Write-Host " App URL:    http://$APP_IP (Passwordless)"
+Write-Host " Jenkins:    http://$($JENKINS_IP):8080 (Passwordless)"
+Write-Host " Grafana:    http://$($APP_IP):3001 (Passwordless Admin)"
+Write-Host " Prometheus: http://$($APP_IP):9091 (Passwordless)"
 Write-Host "========================================="
