@@ -196,7 +196,6 @@ REMOTE_DEPLOY
                 echo "Production App updated at http://${targetAppIp}"
             }
         }
-        }
         always {
             script {
                 try {
