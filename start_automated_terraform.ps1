@@ -195,6 +195,21 @@ if (-not (Test-Path -LiteralPath $PemPathInput)) {
 $PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
 $script:SshOptions = @("-i", $PemPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
 
+try {
+    $currentIp = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com" -TimeoutSec 5).Trim()
+    if ($currentIp -match '^\d{1,3}(\.\d{1,3}){3}$') {
+        $tfvarsPath = Join-Path $ProjectRoot "terraform\terraform.tfvars"
+        if (Test-Path -LiteralPath $tfvarsPath) {
+            $tfvarsContent = [System.IO.File]::ReadAllText($tfvarsPath, [System.Text.Encoding]::UTF8)
+            $tfvarsContent = [regex]::Replace($tfvarsContent, 'admin_cidr\s*=\s*"[^"]*"', "admin_cidr     = `"$currentIp/32`"")
+            [System.IO.File]::WriteAllText($tfvarsPath, $tfvarsContent, $Utf8NoBom)
+            Write-Host "Auto-detected current admin IP: $currentIp/32"
+        }
+    }
+} catch {
+    Write-Host "Could not auto-detect public IP; using terraform.tfvars as configured."
+}
+
 Write-Host "Initializing Terraform..."
 terraform -chdir=terraform init -no-color | Out-Null
 

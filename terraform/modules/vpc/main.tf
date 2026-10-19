@@ -38,21 +38,21 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_security_group" "jenkins_sg" {
   name        = "jenkins-sg"
-  description = "Allow SSH and Jenkins access from the configured admin CIDR"
+  description = "Allow SSH and Jenkins access"
   vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -65,14 +65,14 @@ resource "aws_security_group" "jenkins_sg" {
 
 resource "aws_security_group" "app_sg" {
   name        = "app-sg"
-  description = "Allow public web traffic and admin access from the configured CIDR"
+  description = "Allow public web traffic, SSH, and monitoring access"
   vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
@@ -101,14 +101,14 @@ resource "aws_security_group" "app_sg" {
     from_port   = 3001
     to_port     = 3001
     protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
     from_port   = 9091
     to_port     = 9091
     protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {

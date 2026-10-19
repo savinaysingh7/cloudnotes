@@ -8,8 +8,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: cloudnotes.local
-      http:
+    - http:
         paths:
           - path: /api
             pathType: Prefix
