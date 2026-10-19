@@ -6,14 +6,26 @@ ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = ROOT / "screenshots"
 SCREENSHOTS.mkdir(exist_ok=True)
 
+app_ip = "3.108.191.94"
+tfstate_file = ROOT / "terraform" / "terraform.tfstate"
+if tfstate_file.exists():
+    try:
+        import json
+        with open(tfstate_file, "r", encoding="utf-8") as f:
+            tf = json.load(f)
+            if "outputs" in tf and "app_public_ip" in tf["outputs"]:
+                app_ip = tf["outputs"]["app_public_ip"]["value"]
+    except Exception:
+        pass
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     context = browser.new_context(viewport={'width': 1920, 'height': 1080})
     page = context.new_page()
 
     # 1. Grafana Login & Dashboard
-    print('Navigating to Grafana login...')
-    page.goto('http://127.0.0.1:3001/login')
+    print(f'Navigating to Grafana login at http://{app_ip}:3001/login...')
+    page.goto(f'http://{app_ip}:3001/login')
     page.wait_for_selector('input[name="user"]')
     page.fill('input[name="user"]', 'admin')
     page.fill('input[name="password"]', 'CHANGE_ME')
@@ -21,7 +33,7 @@ with sync_playwright() as p:
     time.sleep(3)
 
     print('Navigating to CloudNotes Production Dashboard...')
-    page.goto('http://127.0.0.1:3001/d/cloudnotes-prod/cloudnotes-production-dashboard?orgId=1&refresh=5s&from=now-1h&to=now')
+    page.goto(f'http://{app_ip}:3001/d/cloudnotes-prod/cloudnotes-production-dashboard?orgId=1&refresh=5s&from=now-1h&to=now')
     time.sleep(6)
     
     # Hide sidebar or collapse menus if open for clean capture
@@ -30,14 +42,14 @@ with sync_playwright() as p:
 
     # 2. Prometheus Alerts
     print('Navigating to Prometheus Alerts...')
-    page.goto('http://127.0.0.1:9091/alerts')
+    page.goto(f'http://{app_ip}:9091/alerts')
     time.sleep(3)
     page.screenshot(path=str(SCREENSHOTS / 'screenshot_prometheus_alerts.png'))
     print('Saved screenshot_prometheus_alerts.png')
 
     # 3. Prometheus Targets
     print('Navigating to Prometheus Targets...')
-    page.goto('http://127.0.0.1:9091/targets')
+    page.goto(f'http://{app_ip}:9091/targets')
     time.sleep(3)
     page.screenshot(path=str(SCREENSHOTS / 'screenshot_prometheus_targets.png'))
     print('Saved screenshot_prometheus_targets.png')

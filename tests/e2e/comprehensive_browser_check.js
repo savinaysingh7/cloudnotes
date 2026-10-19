@@ -2,14 +2,32 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
 
-const APP_URL = (process.env.CLOUDNOTES_URL || 'http://127.0.0.1:8081').trim().replace(/\/+$/, '');
-const PROM_URL = (process.env.PROMETHEUS_URL || 'http://127.0.0.1:9091').trim().replace(/\/+$/, '');
-const GRAFANA_URL = (process.env.GRAFANA_URL || 'http://127.0.0.1:3001').trim().replace(/\/+$/, '');
-const JENKINS_URL = (process.env.JENKINS_URL || 'http://127.0.0.1:8080').trim().replace(/\/+$/, '');
+let appIp = '3.108.191.94';
+let jenkinsIp = '3.6.90.59';
+
+const tfstatePath = path.join(__dirname, '..', '..', 'terraform', 'terraform.tfstate');
+if (fs.existsSync(tfstatePath)) {
+  try {
+    const tf = JSON.parse(fs.readFileSync(tfstatePath, 'utf8'));
+    if (tf.outputs && tf.outputs.app_public_ip && tf.outputs.app_public_ip.value) {
+      appIp = tf.outputs.app_public_ip.value;
+    }
+    if (tf.outputs && tf.outputs.jenkins_public_ip && tf.outputs.jenkins_public_ip.value) {
+      jenkinsIp = tf.outputs.jenkins_public_ip.value;
+    }
+  } catch (e) {
+    console.warn(`[E2E] Could not read terraform.tfstate: ${e.message}`);
+  }
+}
+
+const APP_URL = (process.env.CLOUDNOTES_URL || `http://${appIp}`).trim().replace(/\/+$/, '');
+const PROM_URL = (process.env.PROMETHEUS_URL || `http://${appIp}:9091`).trim().replace(/\/+$/, '');
+const GRAFANA_URL = (process.env.GRAFANA_URL || `http://${appIp}:3001`).trim().replace(/\/+$/, '');
+const JENKINS_URL = (process.env.JENKINS_URL || `http://${jenkinsIp}:8080`).trim().replace(/\/+$/, '');
 const JENKINS_USER = (process.env.JENKINS_USER || 'admin').trim();
 const JENKINS_PASSWORD = (process.env.JENKINS_PASSWORD || 'CHANGE_ME').trim();
 
-const ARTIFACT_DIR = process.env.ARTIFACT_DIR || 'C:\\Users\\savin\\.gemini\\antigravity\\brain\\58d94cea-2cf3-4818-a090-2835c6bd8fda';
+const ARTIFACT_DIR = process.env.ARTIFACT_DIR || 'C:\\Users\\savin\\.gemini\\antigravity\\brain\\614c16a7-8f71-4cbb-bcf7-79712286a07b';
 const SCREENSHOT_DIR = path.join(__dirname, '..', '..', 'screenshots');
 if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
