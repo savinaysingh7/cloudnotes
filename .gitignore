@@ -38,3 +38,4 @@ creds_*.groovy
 jenkins_creds*.groovy
 list_creds.groovy
 NUL
+node_modules/

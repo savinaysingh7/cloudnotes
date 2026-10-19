@@ -55,7 +55,7 @@ The Kubernetes manifests use namespace `cloudnotes`. They include application De
 5. Access through the ingress controller using `cloudnotes.local` (map it to the controller address in the local hosts file if needed). To use the frontend NodePort instead, run `minikube service frontend -n cloudnotes`.
 6. Inspect scaling with `kubectl get scaledobjects,hpa -n cloudnotes` and replica counts with `kubectl get deployments -n cloudnotes`.
 
-Kubernetes monitoring deploys Prometheus and the alert rules in `kubernetes/monitoring.yaml`. The provisioned Grafana dashboard is part of the local Compose setup; the Kubernetes manifests do not deploy Grafana.
+Kubernetes monitoring deploys Prometheus (with alert rules) and Grafana (pre-provisioned with the Prometheus datasource and the CloudNotes Production Dashboard) via `kubernetes/monitoring.yaml`. Grafana is exposed on host port 3001 and Prometheus on host port 9091.
 
 ## AWS provisioning
 
@@ -87,7 +87,7 @@ The Terraform configuration creates a VPC and public subnet, security groups, an
 
    Public IPs are dynamic and may differ from historical documentation. Terraform bootstraps the infrastructure and cluster; CloudNotes becomes available only after the Kubernetes manifests and application images are deployed successfully. Repository files alone do not prove that a live endpoint is running.
 
-   The Ingress routes by host name `cloudnotes.local`, so include that Host header when checking the public IP directly:
+   The Ingress routes all incoming traffic directly without requiring manual hosts file edits or Host header overrides (and also honors an optional `Host: cloudnotes.local` header):
 
    ```powershell
    $appIp = (terraform -chdir=terraform output -raw app_public_ip).Trim()
@@ -97,7 +97,7 @@ The Terraform configuration creates a VPC and public subnet, security groups, an
    Invoke-RestMethod -Uri "http://$appIp/api/notes" -Headers $headers
    ```
 
-   A request without the `cloudnotes.local` Host header reaches the Ingress default backend and can return HTTP 404 even when the application is healthy.
+   Direct IP requests and requests with the `cloudnotes.local` Host header both route directly to the application services.
 
 ## Jenkins delivery pipeline
 

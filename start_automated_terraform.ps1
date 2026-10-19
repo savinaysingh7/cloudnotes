@@ -6,6 +6,27 @@ Set-Location $ProjectRoot
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $SecretDir = Join-Path $ProjectRoot ".secrets"
 
+function Read-OptionalSecret {
+    param(
+        [Parameter(Mandatory = $true)][string]$EnvName,
+        [Parameter(Mandatory = $true)][string]$FilePath
+    )
+
+    $envValue = [Environment]::GetEnvironmentVariable($EnvName)
+    if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+        return $envValue.TrimEnd("`r", "`n")
+    }
+
+    if (Test-Path -LiteralPath $FilePath) {
+        $fileValue = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $FilePath).Path, [System.Text.Encoding]::UTF8)
+        if (-not [string]::IsNullOrWhiteSpace($fileValue)) {
+            return $fileValue.TrimEnd("`r", "`n")
+        }
+    }
+
+    return $null
+}
+
 function Read-RequiredSecret {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -178,36 +199,77 @@ Write-Host "========================================="
 Write-Host " Starting Mumbai CloudNotes (Terraform)  "
 Write-Host "========================================="
 
-$GithubToken = Read-RequiredSecret `
-    -Name "GitHub webhook token" `
+$GithubToken = Read-OptionalSecret `
     -EnvName "CLOUDNOTES_GITHUB_TOKEN" `
     -FilePath (Join-Path $SecretDir "github_token.txt")
-$DockerHubPassword = Read-RequiredSecret `
-    -Name "Docker Hub password" `
+$DockerHubPassword = Read-OptionalSecret `
     -EnvName "CLOUDNOTES_DOCKERHUB_PASSWORD" `
     -FilePath (Join-Path $SecretDir "dockerhub_password.txt")
+if (-not $DockerHubPassword) {
+    $DockerHubPassword = "CHANGE_ME"
+    Write-Host "No Docker Hub password found; using placeholder credentials (push stage in Jenkins will be skipped)."
+}
 $HookId = if ($env:CLOUDNOTES_GITHUB_HOOK_ID) { $env:CLOUDNOTES_GITHUB_HOOK_ID } else { "628416052" }
 $Repo = if ($env:CLOUDNOTES_GITHUB_REPO) { $env:CLOUDNOTES_GITHUB_REPO } else { "savinaysingh7/cloudnotes" }
-$PemPathInput = if ($env:CLOUDNOTES_SSH_KEY_PATH) { $env:CLOUDNOTES_SSH_KEY_PATH } else { Join-Path $env:USERPROFILE ".ssh\cloudnotes-aws" }
-if (-not (Test-Path -LiteralPath $PemPathInput)) {
-    throw "Missing SSH private key: $PemPathInput"
+
+$candidateKeys = @(
+    $env:CLOUDNOTES_SSH_KEY_PATH,
+    (Join-Path $SecretDir "cloudnotes-aws"),
+    (Join-Path $SecretDir "cloudnotes-deploy"),
+    (Join-Path $env:USERPROFILE ".ssh\cloudnotes-aws")
+)
+$PemPath = $null
+foreach ($k in $candidateKeys) {
+    if ($k -and (Test-Path -LiteralPath $k)) {
+        $PemPath = (Resolve-Path -LiteralPath $k).Path
+        break
+    }
 }
-$PemPath = (Resolve-Path -LiteralPath $PemPathInput).Path
+if (-not $PemPath) {
+    throw "Missing SSH private key. Specify CLOUDNOTES_SSH_KEY_PATH or place a key at $(Join-Path $env:USERPROFILE '.ssh\cloudnotes-aws') or .secrets\cloudnotes-aws."
+}
 $script:SshOptions = @("-i", $PemPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
 
+$currentIp = $null
 try {
     $currentIp = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com" -TimeoutSec 5).Trim()
+} catch {
+    Write-Host "Could not auto-detect public IP via checkip.amazonaws.com."
+}
+
+$tfvarsPath = Join-Path $ProjectRoot "terraform\terraform.tfvars"
+$pubKeyCandidate = "$PemPath.pub"
+$pubKeyValue = $null
+if (Test-Path -LiteralPath $pubKeyCandidate) {
+    $pubKeyValue = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $pubKeyCandidate).Path, [System.Text.Encoding]::UTF8).Trim()
+}
+
+if (-not (Test-Path -LiteralPath $tfvarsPath)) {
+    if (-not $pubKeyValue) {
+        throw "terraform.tfvars does not exist and public key ($pubKeyCandidate) could not be found."
+    }
+    $detectedCidr = if ($currentIp -match '^\d{1,3}(\.\d{1,3}){3}$') { "$currentIp/32" } else { "0.0.0.0/0" }
+    $initialTfvars = "ssh_public_key = `"$pubKeyValue`"`nadmin_cidr     = `"$detectedCidr`"`n"
+    [System.IO.File]::WriteAllText($tfvarsPath, $initialTfvars, $Utf8NoBom)
+    Write-Host "Generated terraform.tfvars with auto-detected SSH key and admin IP."
+} else {
+    $tfvarsContent = [System.IO.File]::ReadAllText($tfvarsPath, [System.Text.Encoding]::UTF8)
     if ($currentIp -match '^\d{1,3}(\.\d{1,3}){3}$') {
-        $tfvarsPath = Join-Path $ProjectRoot "terraform\terraform.tfvars"
-        if (Test-Path -LiteralPath $tfvarsPath) {
-            $tfvarsContent = [System.IO.File]::ReadAllText($tfvarsPath, [System.Text.Encoding]::UTF8)
+        if ($tfvarsContent -match 'admin_cidr\s*=') {
             $tfvarsContent = [regex]::Replace($tfvarsContent, 'admin_cidr\s*=\s*"[^"]*"', "admin_cidr     = `"$currentIp/32`"")
-            [System.IO.File]::WriteAllText($tfvarsPath, $tfvarsContent, $Utf8NoBom)
-            Write-Host "Auto-detected current admin IP: $currentIp/32"
+        } else {
+            $tfvarsContent += "`nadmin_cidr     = `"$currentIp/32`"`n"
+        }
+        Write-Host "Auto-detected current admin IP: $currentIp/32"
+    }
+    if ($pubKeyValue) {
+        if ($tfvarsContent -match 'ssh_public_key\s*=') {
+            $tfvarsContent = [regex]::Replace($tfvarsContent, 'ssh_public_key\s*=\s*"[^"]*"', "ssh_public_key = `"$pubKeyValue`"")
+        } else {
+            $tfvarsContent = "ssh_public_key = `"$pubKeyValue`"`n" + $tfvarsContent
         }
     }
-} catch {
-    Write-Host "Could not auto-detect public IP; using terraform.tfvars as configured."
+    [System.IO.File]::WriteAllText($tfvarsPath, $tfvarsContent, $Utf8NoBom)
 }
 
 Write-Host "Initializing Terraform..."
@@ -275,30 +337,44 @@ if ($UpdatedJenkinsfile -notmatch "APP_SERVER_IP\s*=\s*'$([regex]::Escape($APP_I
 Write-Host "Installing Jenkins credentials..."
 Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -DockerHubPassword $DockerHubPassword
 
-Write-Host "Updating GitHub Webhook..."
-$Headers = @{
-    "Authorization" = "token $GithubToken"
-    "Accept"        = "application/vnd.github.v3+json"
-    "User-Agent"    = "CloudNotes-Disposable-DevOps"
-}
-$Body = @{
-    config = @{
-        url          = "http://$($JENKINS_IP):8080/github-webhook/"
-        content_type = "json"
+if ($GithubToken) {
+    try {
+        Write-Host "Updating GitHub Webhook..."
+        $Headers = @{
+            "Authorization" = "token $GithubToken"
+            "Accept"        = "application/vnd.github.v3+json"
+            "User-Agent"    = "CloudNotes-Disposable-DevOps"
+        }
+        $Body = @{
+            config = @{
+                url          = "http://$($JENKINS_IP):8080/github-webhook/"
+                content_type = "json"
+            }
+        } | ConvertTo-Json -Depth 3
+        Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/hooks/$HookId" -Method Patch -Headers $Headers -Body $Body -ContentType "application/json" | Out-Null
+        Write-Host "GitHub webhook updated successfully."
+    } catch {
+        Write-Warning "Could not automatically update GitHub webhook: $($_.Exception.Message)"
     }
-} | ConvertTo-Json -Depth 3
-Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/hooks/$HookId" -Method Patch -Headers $Headers -Body $Body -ContentType "application/json" | Out-Null
+} else {
+    Write-Host "No GitHub token found; skipping webhook update. Webhook URL: http://$($JENKINS_IP):8080/github-webhook/"
+}
 
 Write-Host "Pushing Jenkinsfile to GitHub..."
-git add Jenkinsfile
-git diff --cached --quiet
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Jenkinsfile already points at the current App IP; no commit needed."
-} elseif ($LASTEXITCODE -eq 1) {
-    Invoke-Checked -Tool "git" -Arguments @("commit", "-m", "Auto-update App IP after Terraform Apply: $APP_IP")
-    Invoke-Checked -Tool "git" -Arguments @("push", "origin", "main")
-} else {
-    throw "git diff failed with exit code $LASTEXITCODE."
+try {
+    git add Jenkinsfile
+    git diff --cached --quiet
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Jenkinsfile already points at the current App IP; no commit needed."
+    } elseif ($LASTEXITCODE -eq 1) {
+        Invoke-Checked -Tool "git" -Arguments @("commit", "-m", "Auto-update App IP after Terraform Apply: $APP_IP")
+        & git push origin main
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "git push origin main exited with code $LASTEXITCODE. Local commit preserved."
+        }
+    }
+} catch {
+    Write-Warning "Git commit/push skipped: $($_.Exception.Message)"
 }
 
 Write-Host "========================================="

@@ -96,6 +96,188 @@ spec:
     - port: 9090
       targetPort: 9090
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: cloudnotes
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        jsonData:
+          timeInterval: 15s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: cloudnotes
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'CloudNotes Dashboards'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-cloudnotes
+  namespace: cloudnotes
+data:
+  cloudnotes.json: |
+    {
+      "uid": "cloudnotes-prod",
+      "title": "CloudNotes Production Dashboard",
+      "tags": ["cloudnotes", "production"],
+      "refresh": "5s",
+      "version": 3,
+      "time": {
+        "to": "now",
+        "from": "now-1h"
+      },
+      "timezone": "browser",
+      "schemaVersion": 36,
+      "panels": [
+        {
+          "title": "Backend Status",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "up{job=\"cloudnotes-backend\"}", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Total Notes Created",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "targets": [
+            { "expr": "sum(notes_created_total)", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Total Notes Deleted",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+          "targets": [
+            { "expr": "sum(notes_deleted_total)", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Total Notes Updated",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+          "targets": [
+            { "expr": "sum(notes_updated_total)", "refId": "A" }
+          ]
+        },
+        {
+          "title": "Error Rate (%)",
+          "type": "gauge",
+          "gridPos": { "h": 8, "w": 4, "x": 20, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 100,
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum(rate(flask_http_request_total{status=~\"5..\"}[5m])) or vector(0)) / (sum(rate(flask_http_request_total[5m])) or vector(1)) * 100",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "HTTP Request Rate (5m)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 10, "x": 0, "y": 4 },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "rate(flask_http_request_total[5m])",
+              "legendFormat": "{{method}} {{status}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "P95 Latency",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 10, "x": 10, "y": 4 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P95 Latency",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Backend Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 20, "x": 0, "y": 12 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{job=\"cloudnotes-backend\"}",
+              "legendFormat": "Memory (bytes)",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -122,6 +304,23 @@ spec:
               value: "CHANGE_ME"
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards-data
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards-data
+          configMap:
+            name: grafana-dashboard-cloudnotes
 ---
 apiVersion: v1
 kind: Service

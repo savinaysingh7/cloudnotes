@@ -1,3 +1,4 @@
+import os
 import time
 import shutil
 from pathlib import Path
@@ -6,7 +7,22 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = ROOT / "screenshots"
 SCREENSHOTS.mkdir(exist_ok=True)
-ARTIFACT_DIR = Path(r"C:\Users\savin\.gemini\antigravity\brain\ea0170fa-9f34-4ce4-b9b9-972a62b9f5a1")
+ARTIFACT_DIR = Path(os.getenv("ARTIFACT_DIR", r"C:\Users\savin\.gemini\antigravity\brain\58d94cea-2cf3-4818-a090-2835c6bd8fda"))
+
+APP_URL = os.getenv("CLOUDNOTES_URL", "http://127.0.0.1:8081").rstrip('/')
+PROM_URL = os.getenv("PROMETHEUS_URL", "http://127.0.0.1:9091").rstrip('/')
+GRAFANA_URL = os.getenv("GRAFANA_URL", "http://127.0.0.1:3001").rstrip('/')
+GRAFANA_PASSWORD = os.getenv("GF_SECURITY_ADMIN_PASSWORD", "CHANGE_ME")
+JENKINS_URL = os.getenv("JENKINS_URL", "http://127.0.0.1:8080").rstrip('/')
+JENKINS_USER = os.getenv("JENKINS_USER", "admin")
+JENKINS_PASSWORD = os.getenv("JENKINS_PASSWORD", "admin")
+
+def save_and_copy(source_path, filename):
+    if ARTIFACT_DIR.exists():
+        try:
+            shutil.copy(source_path, ARTIFACT_DIR / filename)
+        except Exception:
+            pass
 
 def run_browser_automation():
     results = {}
@@ -19,13 +35,13 @@ def run_browser_automation():
         page.on('dialog', lambda dialog: dialog.accept())
 
         # 1. Open CloudNotes Frontend
-        print("[E2E] 1. Loading CloudNotes frontend at http://127.0.0.1:8081...")
-        page.goto('http://127.0.0.1:8081/', wait_until='networkidle')
+        print(f"[E2E] 1. Loading CloudNotes frontend at {APP_URL}...")
+        page.goto(f'{APP_URL}/', wait_until='networkidle')
         time.sleep(2)
         assert "CloudNotes" in page.title()
         home_shot = SCREENSHOTS / 'screenshot_app_home.png'
         page.screenshot(path=str(home_shot))
-        shutil.copy(home_shot, ARTIFACT_DIR / 'screenshot_app_home.png')
+        save_and_copy(home_shot, 'screenshot_app_home.png')
         results['home'] = True
         print("[E2E] Saved screenshot_app_home.png")
 
@@ -41,7 +57,7 @@ def run_browser_automation():
 
         created_shot = SCREENSHOTS / 'screenshot_app_created_note.png'
         page.screenshot(path=str(created_shot))
-        shutil.copy(created_shot, ARTIFACT_DIR / 'screenshot_app_created_note.png')
+        save_and_copy(created_shot, 'screenshot_app_created_note.png')
         results['create_note'] = True
         print("[E2E] Note created successfully; saved screenshot_app_created_note.png")
 
@@ -78,30 +94,57 @@ def run_browser_automation():
         print("[E2E] Note deleted successfully.")
 
         # 6. Prometheus Targets
-        print("[E2E] 6. Capturing Prometheus targets...")
-        page.goto('http://127.0.0.1:9091/targets')
+        print(f"[E2E] 6. Capturing Prometheus targets at {PROM_URL}/targets...")
+        page.goto(f'{PROM_URL}/targets')
         time.sleep(3)
         prom_shot = SCREENSHOTS / 'screenshot_prometheus_targets.png'
         page.screenshot(path=str(prom_shot))
-        shutil.copy(prom_shot, ARTIFACT_DIR / 'screenshot_prometheus_targets.png')
+        save_and_copy(prom_shot, 'screenshot_prometheus_targets.png')
         results['prometheus'] = True
         print("[E2E] Prometheus targets captured.")
 
         # 7. Grafana Dashboard
-        print("[E2E] 7. Capturing Grafana Production Dashboard...")
-        page.goto('http://127.0.0.1:3001/login')
+        print(f"[E2E] 7. Capturing Grafana Production Dashboard at {GRAFANA_URL}...")
+        page.goto(f'{GRAFANA_URL}/login')
         page.wait_for_selector('input[name="user"]')
         page.fill('input[name="user"]', 'admin')
-        page.fill('input[name="password"]', 'CHANGE_ME')
+        page.fill('input[name="password"]', GRAFANA_PASSWORD)
         page.click('button[type="submit"]')
         time.sleep(3)
-        page.goto('http://127.0.0.1:3001/d/cloudnotes-prod/cloudnotes-production-dashboard?orgId=1&refresh=5s&from=now-1h&to=now')
+        page.goto(f'{GRAFANA_URL}/d/cloudnotes-prod/cloudnotes-production-dashboard?orgId=1&refresh=5s&from=now-1h&to=now')
         time.sleep(6)
         grafana_shot = SCREENSHOTS / 'screenshot_grafana_dashboard.png'
         page.screenshot(path=str(grafana_shot))
-        shutil.copy(grafana_shot, ARTIFACT_DIR / 'screenshot_grafana_dashboard.png')
+        save_and_copy(grafana_shot, 'screenshot_grafana_dashboard.png')
         results['grafana'] = True
         print("[E2E] Grafana dashboard captured.")
+
+        # 8. Jenkins Dashboard & Pipeline Job
+        print(f"[E2E] 8. Capturing Jenkins Dashboard at {JENKINS_URL}...")
+        try:
+            page.goto(f'{JENKINS_URL}/login')
+            page.wait_for_selector('input[name="j_username"]', timeout=8000)
+            page.fill('input[name="j_username"]', JENKINS_USER)
+            page.fill('input[name="j_password"]', JENKINS_PASSWORD)
+            page.click('button[name="Submit"]')
+            time.sleep(3)
+            jenkins_shot = SCREENSHOTS / 'screenshot_jenkins_dashboard.png'
+            page.screenshot(path=str(jenkins_shot))
+            save_and_copy(jenkins_shot, 'screenshot_jenkins_dashboard.png')
+            results['jenkins_dashboard'] = True
+            print("[E2E] Jenkins dashboard captured.")
+
+            # Check pipeline job
+            page.goto(f'{JENKINS_URL}/job/CloudNotes-Pipeline/')
+            time.sleep(2)
+            jenkins_job_shot = SCREENSHOTS / 'screenshot_jenkins_pipeline.png'
+            page.screenshot(path=str(jenkins_job_shot))
+            save_and_copy(jenkins_job_shot, 'screenshot_jenkins_pipeline.png')
+            results['jenkins_pipeline'] = True
+            print("[E2E] Jenkins pipeline job captured.")
+        except Exception as e:
+            print(f"[E2E] Jenkins capture warning: {e}")
+            results['jenkins_dashboard'] = False
 
         browser.close()
 

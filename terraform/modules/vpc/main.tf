@@ -42,13 +42,15 @@ resource "aws_security_group" "jenkins_sg" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
+    description = "SSH administrative access restricted to operator CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   ingress {
+    description = "Jenkins web UI and GitHub webhook ingress"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
@@ -56,6 +58,7 @@ resource "aws_security_group" "jenkins_sg" {
   }
 
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -69,10 +72,11 @@ resource "aws_security_group" "app_sg" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
+    description = "SSH administrative access restricted to operator CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   ingress {
@@ -84,6 +88,7 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
+    description = "Public HTTP web traffic"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -91,6 +96,7 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
+    description = "Public HTTPS web traffic"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -98,20 +104,23 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
+    description = "Grafana dashboard access restricted to operator CIDR"
     from_port   = 3001
     to_port     = 3001
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   ingress {
+    description = "Prometheus metrics dashboard restricted to operator CIDR"
     from_port   = 9091
     to_port     = 9091
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -123,3 +132,4 @@ variable "project_name" {}
 variable "admin_cidr" {
   type = string
 }
+

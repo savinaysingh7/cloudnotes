@@ -20,6 +20,15 @@ module "jenkins_ec2" {
                 #!/bin/bash
                 exec > /tmp/jenkins-deploy.log 2>&1
                 export DEBIAN_FRONTEND=noninteractive
+
+                # Configure 2GB swap space for memory stability on budget instances
+                if ! grep -q swapfile /etc/fstab; then
+                  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+                  chmod 600 /swapfile
+                  mkswap /swapfile
+                  swapon /swapfile
+                  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                fi
                 apt-get update
                 apt-get install -y docker.io curl git
                 systemctl start docker
@@ -27,7 +36,12 @@ module "jenkins_ec2" {
 
                 # Setup Jenkins Configuration as Code
                 mkdir -p /opt/jenkins
-                git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /tmp/repo
+                for i in $(seq 1 5); do
+                  if git clone --depth 1 https://github.com/savinaysingh7/cloudnotes.git /tmp/repo; then
+                    break
+                  fi
+                  sleep 5
+                done
                 cp /tmp/repo/jenkins/jenkins.yaml /opt/jenkins/jenkins.yaml
                 mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
                 if [ ! -s /opt/jenkins/cloudnotes-secrets/app_ssh_private_key ]; then
@@ -41,8 +55,16 @@ module "jenkins_ec2" {
                 chmod 755 /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
                 
                 # Update Jenkins URL in yaml
-                PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-                sed -i "s/REPLACE_ME_JENKINS_IP/$PUBLIC_IP/g" /opt/jenkins/jenkins.yaml
+                IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null || true)
+                if [ -n "$IMDS_TOKEN" ]; then
+                  PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)
+                fi
+                if [ -z "$PUBLIC_IP" ]; then
+                  PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)
+                fi
+                if [ -z "$PUBLIC_IP" ]; then
+                  PUBLIC_IP=$(curl -s https://checkip.amazonaws.com 2>/dev/null || true)
+                fi
                 sed -i "s#http://localhost:8080/#http://$PUBLIC_IP:8080/#g" /opt/jenkins/jenkins.yaml
 
                 # Build custom Jenkins image with plugins
@@ -78,15 +100,41 @@ module "app_ec2" {
                 #!/bin/bash
                 exec > /tmp/deploy.log 2>&1
                 export DEBIAN_FRONTEND=noninteractive
+
+                # Configure 2GB swap space for memory stability on budget instances
+                if ! grep -q swapfile /etc/fstab; then
+                  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+                  chmod 600 /swapfile
+                  mkswap /swapfile
+                  swapon /swapfile
+                  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                fi
                 apt-get update
                 apt-get install -y curl git
 
                 # K3s provides the Kubernetes control plane and container runtime.
                 # The bundled Traefik controller is disabled; ingress-nginx is installed below.
                 curl -sfL https://get.k3s.io | sh -s - --disable traefik
+
+                # Wait for k3s.yaml cluster configuration to be generated
+                for i in $(seq 1 60); do
+                  if [ -s /etc/rancher/k3s/k3s.yaml ]; then
+                    break
+                  fi
+                  sleep 2
+                done
                 mkdir -p /home/ubuntu/.kube
                 cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
                 chown -R ubuntu:ubuntu /home/ubuntu/.kube
+                chmod 600 /home/ubuntu/.kube/config
+
+                # Wait for K3s node to report Ready before applying Helm charts
+                for i in $(seq 1 60); do
+                  if sudo -u ubuntu env KUBECONFIG=/home/ubuntu/.kube/config kubectl get nodes 2>/dev/null | grep -q " Ready"; then
+                    break
+                  fi
+                  sleep 3
+                done
 
                 # KEDA supplies Prometheus-driven, request-rate horizontal scaling.
                 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash

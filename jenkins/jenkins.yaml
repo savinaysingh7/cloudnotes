@@ -20,6 +20,9 @@ jobs:
   - script: >
       pipelineJob('CloudNotes-Pipeline') {
         description('Automated CloudNotes delivery pipeline: Code -> Test -> Scan -> Build -> Push -> Deploy.')
+        triggers {
+          githubPush()
+        }
         definition {
           cpsScm {
             scm {

@@ -40,23 +40,37 @@ class Note(db.Model):
     body       = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-with app.app_context():
+_db_initialized = False
+
+def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return True
     try:
         db.create_all()
-    except Exception:
-        pass
-    # Auto-migrate: add created_at column if it doesn't exist on an older DB
-    try:
         from sqlalchemy import text, inspect
         inspector = inspect(db.engine)
-        columns = [c['name'] for c in inspector.get_columns('note')]
-        if 'created_at' not in columns:
-            db.session.execute(text(
-                'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
-            ))
-            db.session.commit()
-    except Exception:
-        pass  # Table may not exist yet (first run) — db.create_all() handles it
+        if 'note' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('note')]
+            if 'created_at' not in columns:
+                db.session.execute(text(
+                    'ALTER TABLE note ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+                ))
+                db.session.commit()
+        _db_initialized = True
+        return True
+    except Exception as e:
+        app.logger.warning(f"Database initialization deferred: {e}")
+        return False
+
+with app.app_context():
+    init_db()
+
+@app.before_request
+def ensure_database_ready():
+    global _db_initialized
+    if not _db_initialized and request.endpoint not in ('health', 'metrics_endpoint'):
+        init_db()
 
 @app.route('/metrics')
 def metrics_endpoint():
@@ -64,6 +78,15 @@ def metrics_endpoint():
 
 @app.route('/api/health')
 def health():
+    db_check = request.args.get('db', '0')
+    if db_check == '1':
+        try:
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
+            init_db()
+            return jsonify({"status": "ok", "database": "connected"})
+        except Exception as e:
+            return jsonify({"status": "degraded", "database": str(e)}), 503
     return jsonify({"status": "ok"})
 
 def serialize_created_at(dt):
@@ -79,9 +102,9 @@ def get_notes():
     if search:
         notes = Note.query.filter(
             Note.title.ilike(f'%{search}%') | Note.body.ilike(f'%{search}%')
-        ).all()
+        ).order_by(Note.created_at.desc(), Note.id.desc()).all()
     else:
-        notes = Note.query.all()
+        notes = Note.query.order_by(Note.created_at.desc(), Note.id.desc()).all()
     return jsonify([{
         "id": n.id,
         "title": n.title,
@@ -91,32 +114,73 @@ def get_notes():
 
 @app.route('/api/notes', methods=['POST'])
 def create_note():
-    data = request.get_json()
-    if not data or 'title' not in data or 'body' not in data:
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Invalid or missing JSON payload"}), 400
+    if 'title' not in data or 'body' not in data:
         return jsonify({"error": "Missing title or body"}), 400
-    note = Note(title=data['title'], body=data['body'])
-    db.session.add(note)
-    db.session.commit()
+    if data['title'] is None or data['body'] is None:
+        return jsonify({"error": "Title and body cannot be null"}), 400
+    if not isinstance(data['title'], str) or not isinstance(data['body'], str):
+        return jsonify({"error": "Title and body must be strings"}), 400
+    title = data['title'].strip()
+    body = data['body'].strip()
+    if not title or not body:
+        return jsonify({"error": "Title and body cannot be empty"}), 400
+    if len(title) > 100:
+        return jsonify({"error": "Title must not exceed 100 characters"}), 400
+    note = Note(title=title, body=body)
+    try:
+        db.session.add(note)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Failed to create note: {e}")
+        return jsonify({"error": "Database error"}), 500
     notes_created_counter.inc()
     return jsonify({"id": note.id, "message": "Note created"}), 201
 
 @app.route('/api/notes/<int:note_id>', methods=['PUT'])
 def update_note(note_id):
     note = db.get_or_404(Note, note_id)
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
         return jsonify({"error": "No data provided"}), 400
-    note.title = data.get('title', note.title)
-    note.body = data.get('body', note.body)
-    db.session.commit()
+    if 'title' in data:
+        if data['title'] is None or not isinstance(data['title'], str):
+            return jsonify({"error": "Title must be a non-null string"}), 400
+        new_title = data['title'].strip()
+        if not new_title:
+            return jsonify({"error": "Title cannot be empty"}), 400
+        if len(new_title) > 100:
+            return jsonify({"error": "Title must not exceed 100 characters"}), 400
+        note.title = new_title
+    if 'body' in data:
+        if data['body'] is None or not isinstance(data['body'], str):
+            return jsonify({"error": "Body must be a non-null string"}), 400
+        new_body = data['body'].strip()
+        if not new_body:
+            return jsonify({"error": "Body cannot be empty"}), 400
+        note.body = new_body
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Failed to update note: {e}")
+        return jsonify({"error": "Database error"}), 500
     notes_updated_counter.inc()
     return jsonify({"id": note.id, "message": "Note updated"})
 
 @app.route('/api/notes/<int:note_id>', methods=['DELETE'])
 def delete_note(note_id):
     note = db.get_or_404(Note, note_id)
-    db.session.delete(note)
-    db.session.commit()
+    try:
+        db.session.delete(note)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Failed to delete note: {e}")
+        return jsonify({"error": "Database error"}), 500
     notes_deleted_counter.inc()
     return jsonify({"message": "Note deleted"})
 

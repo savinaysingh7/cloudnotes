@@ -92,3 +92,104 @@ def test_delete_note(client):
 def test_delete_nonexistent_note(client):
     rv = client.delete('/api/notes/999')
     assert rv.status_code == 404
+
+def test_create_note_whitespace_only(client):
+    rv = client.post('/api/notes', json={"title": "   ", "body": "   "})
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+def test_update_note_whitespace_only(client):
+    rv_create = client.post('/api/notes', json={"title": "Valid", "body": "Valid body"})
+    note_id = rv_create.get_json()["id"]
+    rv = client.put(f'/api/notes/{note_id}', json={"title": "   "})
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+def test_health_with_database_check(client):
+    rv = client.get('/api/health?db=1')
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert data["status"] == "ok"
+    assert data["database"] == "connected"
+
+def test_metrics_endpoint(client):
+    rv = client.get('/metrics')
+    assert rv.status_code == 200
+    assert b'notes_created_total' in rv.data
+
+def test_notes_ordering(client):
+    client.post('/api/notes', json={"title": "First", "body": "First body"})
+    client.post('/api/notes', json={"title": "Second", "body": "Second body"})
+    rv = client.get('/api/notes')
+    data = rv.get_json()
+    assert len(data) == 2
+    assert data[0]["title"] == "Second"
+    assert data[1]["title"] == "First"
+
+def test_create_note_null_fields(client):
+    rv1 = client.post('/api/notes', json={"title": None, "body": "Valid body"})
+    assert rv1.status_code == 400
+    assert "error" in rv1.get_json()
+
+    rv2 = client.post('/api/notes', json={"title": "Valid title", "body": None})
+    assert rv2.status_code == 400
+    assert "error" in rv2.get_json()
+
+def test_create_note_invalid_types(client):
+    rv = client.post('/api/notes', json={"title": 12345, "body": ["not", "string"]})
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+def test_create_note_non_dict_payload(client):
+    rv = client.post('/api/notes', json=["item1", "item2"])
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+def test_create_note_title_too_long(client):
+    long_title = "x" * 101
+    rv = client.post('/api/notes', json={"title": long_title, "body": "Valid body"})
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+def test_update_note_null_fields(client):
+    rv_create = client.post('/api/notes', json={"title": "Init", "body": "Init body"})
+    note_id = rv_create.get_json()["id"]
+
+    rv_title = client.put(f'/api/notes/{note_id}', json={"title": None})
+    assert rv_title.status_code == 400
+    assert "error" in rv_title.get_json()
+
+    rv_body = client.put(f'/api/notes/{note_id}', json={"body": None})
+    assert rv_body.status_code == 400
+    assert "error" in rv_body.get_json()
+
+def test_update_note_title_too_long(client):
+    rv_create = client.post('/api/notes', json={"title": "Init", "body": "Init body"})
+    note_id = rv_create.get_json()["id"]
+
+    rv = client.put(f'/api/notes/{note_id}', json={"title": "x" * 101})
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+def test_get_notes_search_by_body(client):
+    client.post('/api/notes', json={"title": "Random Title", "body": "SpecificKeywordInBody"})
+    client.post('/api/notes', json={"title": "Other", "body": "Nothing"})
+
+    rv = client.get('/api/notes?search=SpecificKeywordInBody')
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert len(data) == 1
+    assert data[0]["title"] == "Random Title"
+
+def test_update_and_delete_metrics(client):
+    rv_create = client.post('/api/notes', json={"title": "Tracked", "body": "Metrics body"})
+    note_id = rv_create.get_json()["id"]
+
+    client.put(f'/api/notes/{note_id}', json={"title": "Tracked (Updated)"})
+    client.delete(f'/api/notes/{note_id}')
+
+    rv_metrics = client.get('/metrics')
+    assert rv_metrics.status_code == 200
+    assert b'notes_updated_total' in rv_metrics.data
+    assert b'notes_deleted_total' in rv_metrics.data
+

@@ -15,8 +15,8 @@ pipeline {
         IMAGE_NAME_BE   = 'cloudnotes-backend'
         IMAGE_NAME_FE   = 'cloudnotes-frontend'
         TAG             = "${env.BUILD_NUMBER}"
-        APP_SERVER_IP   = '52.66.212.52'
-        APP_SERVER_SSH_IP = '10.0.1.49'
+        APP_SERVER_IP   = '35.154.95.244'
+        APP_SERVER_SSH_IP = '10.0.1.100'
         PATH            = "/usr/bin:/usr/local/bin:${env.PATH}"
     }
 
@@ -136,7 +136,7 @@ pipeline {
                                 kubectl rollout status deployment/frontend -n cloudnotes --timeout=180s
 
                                 for attempt in \$(seq 1 30); do
-                                    if curl -fsS -H 'Host: cloudnotes.local' http://localhost/api/health >/dev/null; then
+                                    if curl -fsS -H 'Host: cloudnotes.local' http://localhost/api/health >/dev/null || curl -fsS http://localhost/api/health >/dev/null; then
                                         exit 0
                                     fi
                                     sleep 5
