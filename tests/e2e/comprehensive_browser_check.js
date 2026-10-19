@@ -54,6 +54,8 @@ function copyToArtifact(filename) {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-web-security',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
       '--disable-features=HttpsFirstMode,HttpsFirstBalancedMode,HttpsUpgrades'
     ]
   });
