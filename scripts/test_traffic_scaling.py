@@ -2,7 +2,25 @@ import urllib.request
 import time
 import concurrent.futures
 
-TARGET_URL = "http://3.108.191.94/api/notes"
+import os
+import sys
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+app_ip = "3.108.191.94"
+tfstate_file = ROOT / "terraform" / "terraform.tfstate"
+if tfstate_file.exists():
+    try:
+        with open(tfstate_file, "r", encoding="utf-8") as f:
+            tf = json.load(f)
+            if "outputs" in tf and "app_public_ip" in tf["outputs"]:
+                app_ip = tf["outputs"]["app_public_ip"]["value"]
+    except Exception:
+        pass
+
+app_host = sys.argv[1] if len(sys.argv) > 1 else os.getenv("APP_IP", app_ip)
+TARGET_URL = f"http://{app_host}/api/notes"
 
 def fetch(i):
     try:

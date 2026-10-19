@@ -1,7 +1,24 @@
 const puppeteer = require('puppeteer');
 const path = require('path');
+const fs = require('fs');
 
 (async () => {
+  let appIp = '3.108.191.94';
+  let jenkinsIp = '3.6.90.59';
+
+  const tfstatePath = path.join(__dirname, '..', '..', 'terraform', 'terraform.tfstate');
+  if (fs.existsSync(tfstatePath)) {
+    try {
+      const tf = JSON.parse(fs.readFileSync(tfstatePath, 'utf8'));
+      if (tf.outputs && tf.outputs.app_public_ip && tf.outputs.app_public_ip.value) {
+        appIp = tf.outputs.app_public_ip.value;
+      }
+      if (tf.outputs && tf.outputs.jenkins_public_ip && tf.outputs.jenkins_public_ip.value) {
+        jenkinsIp = tf.outputs.jenkins_public_ip.value;
+      }
+    } catch (e) {}
+  }
+
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-web-security'] });
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800 });
@@ -18,10 +35,10 @@ const path = require('path');
   };
 
   const localAppUrl = process.env.LOCAL_APP_URL || 'http://localhost:80';
-  const awsAppUrl = process.env.AWS_APP_URL || (process.env.APP_IP ? `http://${process.env.APP_IP}/` : 'http://localhost:80');
-  const jenkinsUrl = process.env.JENKINS_URL || (process.env.JENKINS_IP ? `http://${process.env.JENKINS_IP}:8080/job/CloudNotes-Pipeline/` : 'http://localhost:8080/job/CloudNotes-Pipeline/');
-  const grafanaUrl = process.env.GRAFANA_URL || 'http://localhost:3001';
-  const promUrl = process.env.PROMETHEUS_URL || 'http://localhost:9091';
+  const awsAppUrl = process.env.AWS_APP_URL || (process.env.APP_IP ? `http://${process.env.APP_IP}/` : `http://${appIp}/`);
+  const jenkinsUrl = process.env.JENKINS_URL || (process.env.JENKINS_IP ? `http://${process.env.JENKINS_IP}:8080/job/CloudNotes-Pipeline/` : `http://${jenkinsIp}:8080/job/CloudNotes-Pipeline/`);
+  const grafanaUrl = process.env.GRAFANA_URL || (process.env.APP_IP ? `http://${process.env.APP_IP}:3001` : `http://${appIp}:3001`);
+  const promUrl = process.env.PROMETHEUS_URL || (process.env.APP_IP ? `http://${process.env.APP_IP}:9091` : `http://${appIp}:9091`);
 
   await takeShot('goal_local_app.png', localAppUrl);
   await takeShot('goal_aws_app.png', awsAppUrl);

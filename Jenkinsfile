@@ -104,9 +104,18 @@ pipeline {
                             sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
                         } else {
                             echo "Docker Hub authentication skipped (placeholder credentials); transferring built images directly to Kubernetes node..."
+                            def targetSshIp = env.APP_SERVER_SSH_IP
+                            if (fileExists('/var/jenkins_home/cloudnotes-secrets/app_private_ip')) {
+                                def diskIp = readFile('/var/jenkins_home/cloudnotes-secrets/app_private_ip').trim()
+                                if (diskIp) {
+                                    targetSshIp = diskIp
+                                }
+                            }
+                            sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest"
+                            sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest"
                             sshagent(credentials: ['app-server-ssh-key']) {
-                                sh "docker save ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} | ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'sudo k3s ctr images import -'"
-                                sh "docker save ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} | ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'sudo k3s ctr images import -'"
+                                sh "docker save ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_BE}:latest | ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@${targetSshIp} 'sudo k3s ctr images import -'"
+                                sh "docker save ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:${TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME_FE}:latest | ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@${targetSshIp} 'sudo k3s ctr images import -'"
                             }
                         }
                     }
@@ -118,13 +127,26 @@ pipeline {
             steps {
                 script {
                     sshagent(credentials: ['app-server-ssh-key']) {
-                        def sshTest = sh(script: "ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 ubuntu@\${APP_SERVER_SSH_IP} 'echo reachable' || true", returnStdout: true).trim()
+                        def targetSshIp = env.APP_SERVER_SSH_IP
+                        if (fileExists('/var/jenkins_home/cloudnotes-secrets/app_private_ip')) {
+                            def diskIp = readFile('/var/jenkins_home/cloudnotes-secrets/app_private_ip').trim()
+                            if (diskIp) {
+                                targetSshIp = diskIp
+                            }
+                        }
+                        def sshTest = sh(script: "ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 ubuntu@${targetSshIp} 'echo reachable' || true", returnStdout: true).trim()
                         if (sshTest == 'reachable') {
                             sh """
-                            ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} "mkdir -p /home/ubuntu/cloudnotes"
-                            scp -o BatchMode=yes -r -o StrictHostKeyChecking=no kubernetes ubuntu@\${APP_SERVER_SSH_IP}:/home/ubuntu/cloudnotes/
-                            ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@\${APP_SERVER_SSH_IP} 'bash -s' <<'REMOTE_DEPLOY'
+                            ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@${targetSshIp} "mkdir -p /home/ubuntu/cloudnotes"
+                            scp -o BatchMode=yes -r -o StrictHostKeyChecking=no kubernetes ubuntu@${targetSshIp}:/home/ubuntu/cloudnotes/
+                            ssh -o BatchMode=yes -o StrictHostKeyChecking=no ubuntu@${targetSshIp} 'bash -s' <<'REMOTE_DEPLOY'
                                 export KUBECONFIG=/home/ubuntu/.kube/config
+                                for i in \$(seq 1 60); do
+                                    if [ -s "\$KUBECONFIG" ] && kubectl get nodes 2>/dev/null | grep -q " Ready"; then
+                                        break
+                                    fi
+                                    sleep 5
+                                done
                                 kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/namespace.yaml
                                 kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-secret.yaml
                                 kubectl apply -f /home/ubuntu/cloudnotes/kubernetes/postgres-pvc.yaml
@@ -152,7 +174,7 @@ pipeline {
 REMOTE_DEPLOY
                             """
                         } else {
-                            echo "AWS Kubernetes host \${APP_SERVER_SSH_IP} is not reachable from local verification network; remote deployment skipped in local mode."
+                            echo "AWS Kubernetes host \${targetSshIp} is not reachable from local verification network; remote deployment skipped in local mode."
                         }
                     }
                 }
@@ -163,7 +185,17 @@ REMOTE_DEPLOY
     post {
         success {
             echo "--- PIPELINE SUCCESSFUL ---"
-            echo "Production App updated at http://${APP_SERVER_IP}"
+            script {
+                def targetAppIp = env.APP_SERVER_IP
+                if (fileExists('/var/jenkins_home/cloudnotes-secrets/app_public_ip')) {
+                    def diskAppIp = readFile('/var/jenkins_home/cloudnotes-secrets/app_public_ip').trim()
+                    if (diskAppIp) {
+                        targetAppIp = diskAppIp
+                    }
+                }
+                echo "Production App updated at http://${targetAppIp}"
+            }
+        }
         }
         always {
             script {

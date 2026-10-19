@@ -2,7 +2,23 @@ import time
 import os
 from playwright.sync_api import sync_playwright
 
-JENKINS_URL = "http://localhost:8080"
+import sys
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+jenkins_ip = "3.6.90.59"
+tfstate_file = ROOT / "terraform" / "terraform.tfstate"
+if tfstate_file.exists():
+    try:
+        with open(tfstate_file, "r", encoding="utf-8") as f:
+            tf = json.load(f)
+            if "outputs" in tf and "jenkins_public_ip" in tf["outputs"]:
+                jenkins_ip = tf["outputs"]["jenkins_public_ip"]["value"]
+    except Exception:
+        pass
+
+JENKINS_URL = sys.argv[1] if len(sys.argv) > 1 else os.getenv("JENKINS_URL", f"http://{jenkins_ip}:8080")
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True, args=["--disable-gpu", "--no-sandbox"])

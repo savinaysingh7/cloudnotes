@@ -3,6 +3,25 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
+# Validate required CLI tools before starting
+$missingTools = @()
+foreach ($tool in @("terraform", "git", "ssh", "ssh-keygen")) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        $missingTools += $tool
+    }
+}
+if ($missingTools.Count -gt 0) {
+    throw "Missing required tools: $($missingTools -join ', '). Please install them and ensure they are added to PATH."
+}
+
+# Warn early if AWS credentials are not configured
+$hasAwsCreds = ($env:AWS_ACCESS_KEY_ID -and $env:AWS_SECRET_ACCESS_KEY) -or
+               (Test-Path (Join-Path $env:USERPROFILE ".aws\credentials")) -or
+               (Test-Path (Join-Path $env:USERPROFILE ".aws\config"))
+if (-not $hasAwsCreds) {
+    Write-Warning "AWS credentials not detected in environment or ~/.aws/credentials. Terraform operations will require active AWS credentials."
+}
+
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $SecretDir = Join-Path $ProjectRoot ".secrets"
 
@@ -127,7 +146,9 @@ function Copy-ToRemote {
 function Install-JenkinsCredentials {
     param(
         [Parameter(Mandatory = $true)][string]$JenkinsIp,
-        [Parameter(Mandatory = $true)][string]$DockerHubPassword
+        [Parameter(Mandatory = $true)][string]$DockerHubPassword,
+        [Parameter(Mandatory = $false)][string]$AppPrivateIp,
+        [Parameter(Mandatory = $false)][string]$AppPublicIp
     )
 
     $initScript = Join-Path $ProjectRoot "jenkins\init.groovy.d\creds.groovy"
@@ -140,9 +161,17 @@ function Install-JenkinsCredentials {
 
     $dockerSecret = Join-Path $tempDir "dockerhub_password"
     $sshPassphraseSecret = Join-Path $tempDir "ssh_key_passphrase"
+    $appPrivateIpSecret = Join-Path $tempDir "app_private_ip"
+    $appPublicIpSecret = Join-Path $tempDir "app_public_ip"
     $installScript = Join-Path $tempDir "install_cloudnotes_creds.sh"
     [System.IO.File]::WriteAllText($dockerSecret, $DockerHubPassword, $Utf8NoBom)
     [System.IO.File]::WriteAllText($sshPassphraseSecret, "", $Utf8NoBom)
+    if ($AppPrivateIp) {
+        [System.IO.File]::WriteAllText($appPrivateIpSecret, $AppPrivateIp, $Utf8NoBom)
+    }
+    if ($AppPublicIp) {
+        [System.IO.File]::WriteAllText($appPublicIpSecret, $AppPublicIp, $Utf8NoBom)
+    }
     $installScriptContent = @'
 set -euo pipefail
 
@@ -150,12 +179,23 @@ sudo mkdir -p /opt/jenkins/init.groovy.d /opt/jenkins/cloudnotes-secrets
 sudo mv /tmp/cloudnotes_creds.groovy /opt/jenkins/init.groovy.d/creds.groovy
 sudo mv /tmp/cloudnotes_dockerhub_password /opt/jenkins/cloudnotes-secrets/dockerhub_password
 sudo mv /tmp/cloudnotes_ssh_key_passphrase /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase
+if [ -f /tmp/cloudnotes_app_private_ip ]; then
+  sudo mv /tmp/cloudnotes_app_private_ip /opt/jenkins/cloudnotes-secrets/app_private_ip
+fi
+if [ -f /tmp/cloudnotes_app_public_ip ]; then
+  sudo mv /tmp/cloudnotes_app_public_ip /opt/jenkins/cloudnotes-secrets/app_public_ip
+fi
 sudo chown -R root:root /opt/jenkins/init.groovy.d
 sudo chown -R ubuntu:ubuntu /opt/jenkins/cloudnotes-secrets
 sudo chmod 755 /opt/jenkins/init.groovy.d
-sudo chmod 700 /opt/jenkins/cloudnotes-secrets
+sudo chmod 755 /opt/jenkins/cloudnotes-secrets
 sudo chmod 644 /opt/jenkins/init.groovy.d/creds.groovy
-sudo chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key /opt/jenkins/cloudnotes-secrets/dockerhub_password /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase
+for f in /opt/jenkins/cloudnotes-secrets/*; do
+  [ -f "$f" ] && sudo chmod 644 "$f"
+done
+[ -f /opt/jenkins/cloudnotes-secrets/app_ssh_private_key ] && sudo chmod 600 /opt/jenkins/cloudnotes-secrets/app_ssh_private_key
+[ -f /opt/jenkins/cloudnotes-secrets/dockerhub_password ] && sudo chmod 600 /opt/jenkins/cloudnotes-secrets/dockerhub_password
+[ -f /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase ] && sudo chmod 600 /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase
 
 for attempt in $(seq 1 120); do
   if sudo docker info >/dev/null 2>&1 && sudo docker ps -a --format '{{.Names}}' | grep -qx jenkins; then
@@ -172,12 +212,18 @@ fi
 if ! sudo docker inspect jenkins --format '{{range .Mounts}}{{println .Destination}}{{end}}' | grep -qx /var/jenkins_home/cloudnotes-secrets; then
   sudo docker exec jenkins mkdir -p /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
   sudo docker cp /opt/jenkins/init.groovy.d/creds.groovy jenkins:/var/jenkins_home/init.groovy.d/creds.groovy
-  sudo docker cp /opt/jenkins/cloudnotes-secrets/app_ssh_private_key jenkins:/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
+  [ -f /opt/jenkins/cloudnotes-secrets/app_ssh_private_key ] && sudo docker cp /opt/jenkins/cloudnotes-secrets/app_ssh_private_key jenkins:/var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
   sudo docker cp /opt/jenkins/cloudnotes-secrets/dockerhub_password jenkins:/var/jenkins_home/cloudnotes-secrets/dockerhub_password
   sudo docker cp /opt/jenkins/cloudnotes-secrets/ssh_key_passphrase jenkins:/var/jenkins_home/cloudnotes-secrets/ssh_key_passphrase
+  [ -f /opt/jenkins/cloudnotes-secrets/app_private_ip ] && sudo docker cp /opt/jenkins/cloudnotes-secrets/app_private_ip jenkins:/var/jenkins_home/cloudnotes-secrets/app_private_ip
+  [ -f /opt/jenkins/cloudnotes-secrets/app_public_ip ] && sudo docker cp /opt/jenkins/cloudnotes-secrets/app_public_ip jenkins:/var/jenkins_home/cloudnotes-secrets/app_public_ip
   sudo docker exec jenkins chown -R jenkins:jenkins /var/jenkins_home/init.groovy.d /var/jenkins_home/cloudnotes-secrets
   sudo docker exec jenkins chmod 644 /var/jenkins_home/init.groovy.d/creds.groovy
-  sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/app_ssh_private_key /var/jenkins_home/cloudnotes-secrets/dockerhub_password /var/jenkins_home/cloudnotes-secrets/ssh_key_passphrase
+  for f in /var/jenkins_home/cloudnotes-secrets/*; do
+    [ -f "$f" ] && sudo docker exec jenkins chmod 644 "$f"
+  done
+  [ -f /opt/jenkins/cloudnotes-secrets/app_ssh_private_key ] && sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/app_ssh_private_key
+  sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/dockerhub_password /var/jenkins_home/cloudnotes-secrets/ssh_key_passphrase
 fi
 
 sudo docker restart jenkins >/dev/null
@@ -191,6 +237,12 @@ echo "Jenkins restarted after credential installation."
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $initScript -RemotePath "/tmp/cloudnotes_creds.groovy"
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $dockerSecret -RemotePath "/tmp/cloudnotes_dockerhub_password"
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $sshPassphraseSecret -RemotePath "/tmp/cloudnotes_ssh_key_passphrase"
+        if (Test-Path -LiteralPath $appPrivateIpSecret) {
+            Copy-ToRemote -HostName $JenkinsIp -LocalPath $appPrivateIpSecret -RemotePath "/tmp/cloudnotes_app_private_ip"
+        }
+        if (Test-Path -LiteralPath $appPublicIpSecret) {
+            Copy-ToRemote -HostName $JenkinsIp -LocalPath $appPublicIpSecret -RemotePath "/tmp/cloudnotes_app_public_ip"
+        }
         Copy-ToRemote -HostName $JenkinsIp -LocalPath $installScript -RemotePath "/tmp/install_cloudnotes_creds.sh"
         Invoke-Remote -HostName $JenkinsIp -Command "bash /tmp/install_cloudnotes_creds.sh && rm -f /tmp/install_cloudnotes_creds.sh"
         Wait-ForJenkins -JenkinsIp $JenkinsIp
@@ -287,6 +339,9 @@ if (-not (Test-Path -LiteralPath $tfvarsPath)) {
             $tfvarsContent += "`nadmin_cidr     = `"$currentIp/32`"`n"
         }
         Write-Host "Auto-detected current admin IP: $currentIp/32"
+    } elseif ($tfvarsContent -notmatch 'admin_cidr\s*=') {
+        $tfvarsContent += "`nadmin_cidr     = `"0.0.0.0/0`"`n"
+        Write-Host "Could not auto-detect admin IP; defaulted admin_cidr to 0.0.0.0/0"
     }
     if ($pubKeyValue) {
         if ($tfvarsContent -match 'ssh_public_key\s*=') {
@@ -365,7 +420,7 @@ if ($UpdatedJenkinsfile -notmatch "APP_SERVER_IP\s*=\s*'$([regex]::Escape($APP_I
 [System.IO.File]::WriteAllText($JenkinsfilePath, $UpdatedJenkinsfile, $Utf8NoBom)
 
 Write-Host "Installing Jenkins credentials..."
-Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -DockerHubPassword $DockerHubPassword
+Install-JenkinsCredentials -JenkinsIp $JENKINS_IP -DockerHubPassword $DockerHubPassword -AppPrivateIp $APP_PRIVATE_IP -AppPublicIp $APP_IP
 
 if ($GithubToken) {
     try {
@@ -434,22 +489,26 @@ try {
     Write-Warning "Could not trigger Jenkins pipeline automatically: $($_.Exception.Message)"
 }
 
-Write-Host "Checking application availability at http://$APP_IP/api/health..."
+Write-Host "Waiting for application deployment and health check at http://$APP_IP/api/health (up to 5 mins)..."
 $appHealthy = $false
-for ($i = 1; $i -le 6; $i++) {
+$healthStart = [System.Diagnostics.Stopwatch]::StartNew()
+for ($attempt = 1; $attempt -le 30; $attempt++) {
     try {
-        $resp = Invoke-RestMethod -Uri "http://$APP_IP/api/health" -TimeoutSec 3 -ErrorAction SilentlyContinue
-        if ($resp.status -eq "ok") {
+        $resp = Invoke-RestMethod -Uri "http://$APP_IP/api/health" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($resp -and $resp.status -eq "ok") {
             $appHealthy = $true
-            Write-Host "Application is live and responding!"
+            $elapsedSec = [math]::Round($healthStart.Elapsed.TotalSeconds)
+            Write-Host "Application is live and responding! (verified in ${elapsedSec}s)"
             break
         }
     } catch {}
-    Start-Sleep -Seconds 5
+    $elapsedSec = [math]::Round($healthStart.Elapsed.TotalSeconds)
+    Write-Host "   Waiting for application pods to deploy... (${elapsedSec}s elapsed)"
+    Start-Sleep -Seconds 10
 }
 if (-not $appHealthy) {
-    Write-Host "Note: Jenkins pipeline is currently building or deploying application pods."
-    Write-Host "Application will be reachable at http://$APP_IP once the pipeline completes."
+    Write-Warning "Application did not respond with status:ok within 5 minutes."
+    Write-Warning "Check Jenkins build status at http://$($JENKINS_IP):8080/job/CloudNotes-Pipeline/"
 }
 
 Write-Host "========================================="

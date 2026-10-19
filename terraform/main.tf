@@ -114,7 +114,7 @@ module "app_ec2" {
 
                 # K3s provides the Kubernetes control plane and container runtime.
                 # The bundled Traefik controller is disabled; ingress-nginx is installed below.
-                curl -sfL https://get.k3s.io | sh -s - --disable traefik
+                curl -sfL https://get.k3s.io | sh -s - --disable traefik --write-kubeconfig-mode 644
 
                 # Wait for k3s.yaml cluster configuration to be generated
                 for i in $(seq 1 60); do
@@ -126,7 +126,9 @@ module "app_ec2" {
                 mkdir -p /home/ubuntu/.kube
                 cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
                 chown -R ubuntu:ubuntu /home/ubuntu/.kube
-                chmod 600 /home/ubuntu/.kube/config
+                chmod 644 /home/ubuntu/.kube/config
+                echo 'export KUBECONFIG=/home/ubuntu/.kube/config' >> /home/ubuntu/.bashrc
+                echo 'KUBECONFIG=/home/ubuntu/.kube/config' >> /etc/environment
 
                 # Wait for K3s node to report Ready before applying Helm charts
                 for i in $(seq 1 60); do
