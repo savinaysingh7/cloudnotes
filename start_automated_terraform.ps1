@@ -66,9 +66,13 @@ function Wait-ForSsh {
 
     Write-Host "Waiting for SSH on $HostName..."
     for ($attempt = 1; $attempt -le 40; $attempt++) {
-        & ssh @script:SshOptions "ubuntu@$HostName" "echo ok" *> $null
-        if ($LASTEXITCODE -eq 0) {
-            return
+        try {
+            $null = & ssh @script:SshOptions "ubuntu@$HostName" "echo ok" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                return
+            }
+        } catch {
+            # Retry on transient connection errors
         }
         Start-Sleep -Seconds 10
     }
@@ -228,6 +232,7 @@ foreach ($k in $candidateKeys) {
 if (-not $PemPath) {
     throw "Missing SSH private key. Specify CLOUDNOTES_SSH_KEY_PATH or place a key at $(Join-Path $env:USERPROFILE '.ssh\cloudnotes-aws') or .secrets\cloudnotes-aws."
 }
+cmd.exe /c "icacls `"$PemPath`" /inheritance:r /grant:r %USERNAME%:(R)" *> $null
 $script:SshOptions = @("-i", $PemPath, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15")
 
 $currentIp = $null
