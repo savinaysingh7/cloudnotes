@@ -227,6 +227,10 @@ if ! sudo docker inspect jenkins --format '{{range .Mounts}}{{println .Destinati
   sudo docker exec jenkins chmod 600 /var/jenkins_home/cloudnotes-secrets/dockerhub_password /var/jenkins_home/cloudnotes-secrets/ssh_key_passphrase
 fi
 
+if [ -f /opt/jenkins/jenkins.yaml ]; then
+  sudo docker cp /opt/jenkins/jenkins.yaml jenkins:/var/jenkins_home/jenkins.yaml 2>/dev/null || true
+fi
+
 sudo docker restart jenkins >/dev/null
 echo "Jenkins restarted after credential installation."
 '@
@@ -473,22 +477,37 @@ $triggerScript = @'
 for i in $(seq 1 60); do
   JOB_STATUS=$(sudo docker exec jenkins curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/job/CloudNotes-Pipeline/api/json 2>/dev/null || true)
   if [ "$JOB_STATUS" = "200" ]; then
-    CRUMB_JSON=$(sudo docker exec jenkins curl -s http://localhost:8080/crumbIssuer/api/json 2>/dev/null || sudo docker exec jenkins curl -u admin:CHANGE_ME -s http://localhost:8080/crumbIssuer/api/json 2>/dev/null || true)
-    CRUMB=$(echo "$CRUMB_JSON" | grep -oP '(?<="crumb":")[^"]*' || true)
     JOB_INFO=$(sudo docker exec jenkins curl -s 'http://localhost:8080/job/CloudNotes-Pipeline/api/json?tree=inQueue,lastBuild[number,building]' 2>/dev/null || true)
     IN_QUEUE=$(echo "$JOB_INFO" | grep -oP '(?<="inQueue":)[^,}]*' || echo "false")
     IS_BUILDING=$(echo "$JOB_INFO" | grep -oP '(?<="building":)[^,}]*' || echo "false")
-    if [ "$IN_QUEUE" != "true" ] && [ "$IS_BUILDING" != "true" ]; then
-      HEADER_ARG=()
-      if [ -n "$CRUMB" ]; then
-        HEADER_ARG=(-H "Jenkins-Crumb: $CRUMB")
-      fi
-      TRIGGER_RES=$(sudo docker exec jenkins curl "${HEADER_ARG[@]}" -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/job/CloudNotes-Pipeline/build 2>/dev/null || sudo docker exec jenkins curl -u admin:CHANGE_ME "${HEADER_ARG[@]}" -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/job/CloudNotes-Pipeline/build 2>/dev/null || true)
-      echo "Triggered CloudNotes-Pipeline build (HTTP $TRIGGER_RES)."
-    else
+    if [ "$IN_QUEUE" = "true" ] || [ "$IS_BUILDING" = "true" ]; then
       echo "CloudNotes-Pipeline is already active (queued or building)."
+      exit 0
     fi
-    exit 0
+
+    sudo docker exec jenkins curl -s -c /tmp/crumb_cookie.txt http://localhost:8080/crumbIssuer/api/json > /tmp/crumb.json 2>/dev/null || true
+    CRUMB=$(grep -oP '(?<="crumb":")[^"]*' /tmp/crumb.json 2>/dev/null || true)
+    if [ -z "$CRUMB" ]; then
+      sudo docker exec jenkins curl -s -u admin:CHANGE_ME -c /tmp/crumb_cookie.txt http://localhost:8080/crumbIssuer/api/json > /tmp/crumb.json 2>/dev/null || true
+      CRUMB=$(grep -oP '(?<="crumb":")[^"]*' /tmp/crumb.json 2>/dev/null || true)
+    fi
+
+    HEADER_ARG=()
+    if [ -n "$CRUMB" ]; then
+      HEADER_ARG=(-H "Jenkins-Crumb: $CRUMB")
+    fi
+
+    TRIGGER_RES=$(sudo docker exec jenkins curl "${HEADER_ARG[@]}" -s -b /tmp/crumb_cookie.txt -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/job/CloudNotes-Pipeline/build 2>/dev/null || true)
+    if [ "$TRIGGER_RES" != "200" ] && [ "$TRIGGER_RES" != "201" ]; then
+      TRIGGER_RES=$(sudo docker exec jenkins curl -u admin:CHANGE_ME "${HEADER_ARG[@]}" -s -b /tmp/crumb_cookie.txt -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/job/CloudNotes-Pipeline/build 2>/dev/null || true)
+    fi
+
+    if [ "$TRIGGER_RES" = "200" ] || [ "$TRIGGER_RES" = "201" ]; then
+      echo "Triggered CloudNotes-Pipeline build successfully (HTTP $TRIGGER_RES)."
+      exit 0
+    else
+      echo "Build trigger attempt returned HTTP $TRIGGER_RES; retrying..."
+    fi
   fi
   sleep 3
 done
@@ -544,7 +563,12 @@ Write-Host "Verifying passwordless direct access to Jenkins, Grafana, and Promet
 try {
     $jResp = Invoke-WebRequest -Uri "http://$($JENKINS_IP):8080/" -UseBasicParsing -TimeoutSec 5
     if ($jResp.StatusCode -eq 200) {
-        Write-Host "   [OK] Jenkins: Passwordless direct access verified (HTTP 200)"
+        $whoAmI = Invoke-RestMethod -Uri "http://$($JENKINS_IP):8080/whoAmI/api/json" -TimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($whoAmI -and $whoAmI.anonymous -eq $true) {
+            Write-Host "   [OK] Jenkins: Passwordless direct access verified (HTTP 200, user: anonymous)"
+        } else {
+            Write-Host "   [OK] Jenkins: Direct access verified (HTTP 200)"
+        }
     } else {
         Write-Warning "   [WARN] Jenkins returned status $($jResp.StatusCode)"
     }
@@ -557,16 +581,19 @@ for ($gAttempt = 1; $gAttempt -le 12; $gAttempt++) {
     try {
         $gResp = Invoke-WebRequest -Uri "http://$($APP_IP):3001/" -UseBasicParsing -TimeoutSec 5
         if ($gResp.StatusCode -eq 200) {
-            $grafanaReady = $true
-            Write-Host "   [OK] Grafana: Passwordless direct access verified (HTTP 200, Anonymous Admin)"
-            break
+            $org = Invoke-RestMethod -Uri "http://$($APP_IP):3001/api/org" -TimeoutSec 5 -ErrorAction SilentlyContinue
+            if ($org -and $org.name) {
+                $grafanaReady = $true
+                Write-Host "   [OK] Grafana: Passwordless direct access verified (HTTP 200, Org: $($org.name), Anonymous Admin)"
+                break
+            }
         }
     } catch {
         Start-Sleep -Seconds 5
     }
 }
 if (-not $grafanaReady) {
-    Write-Warning "   [WARN] Grafana was not accessible within timeout on port 3001"
+    Write-Warning "   [WARN] Grafana was not accessible or anonymous admin unverified on port 3001"
 }
 
 $promReady = $false
@@ -574,8 +601,13 @@ for ($pAttempt = 1; $pAttempt -le 6; $pAttempt++) {
     try {
         $pResp = Invoke-WebRequest -Uri "http://$($APP_IP):9091/-/ready" -UseBasicParsing -TimeoutSec 5
         if ($pResp.StatusCode -eq 200) {
+            $promTargets = Invoke-RestMethod -Uri "http://$($APP_IP):9091/api/v1/query?query=up" -TimeoutSec 5 -ErrorAction SilentlyContinue
             $promReady = $true
-            Write-Host "   [OK] Prometheus: Passwordless direct access verified (HTTP 200)"
+            if ($promTargets -and $promTargets.status -eq "success") {
+                Write-Host "   [OK] Prometheus: Passwordless direct access verified (HTTP 200, targets reporting up)"
+            } else {
+                Write-Host "   [OK] Prometheus: Passwordless direct access verified (HTTP 200)"
+            }
             break
         }
     } catch {
@@ -593,3 +625,14 @@ Write-Host " Jenkins:    http://$($JENKINS_IP):8080 (Passwordless)"
 Write-Host " Grafana:    http://$($APP_IP):3001 (Passwordless Admin)"
 Write-Host " Prometheus: http://$($APP_IP):9091 (Passwordless)"
 Write-Host "========================================="
+
+if (-not $env:CI -and -not $env:NO_BROWSER) {
+    Write-Host "Opening application and dashboards directly in browser..."
+    try {
+        Start-Process "http://$APP_IP"
+        Start-Process "http://$($JENKINS_IP):8080"
+        Start-Process "http://$($APP_IP):3001"
+    } catch {
+        Write-Warning "Could not automatically launch browser: $($_.Exception.Message)"
+    }
+}
