@@ -78,3 +78,7 @@ To inspect current AWS endpoints after provisioning, run `terraform -chdir=terra
 ## Security and scope
 
 The demo has no authentication or authorization. The Terraform security groups include public access rules for demonstration. Replace placeholder secrets, restrict SSH/Jenkins/monitoring access, use TLS, and add authentication before any internet-facing use. Terraform state, AWS credentials, SSH private keys, and populated `.env` files must not be committed.
+
+## CI/CD Automation
+
+Every commit pushed to the `main` branch automatically triggers the Jenkins CI/CD pipeline via GitHub webhooks (`/github-webhook/`). The pipeline executes unit testing, security scanning, container packaging, and deployment to the AWS K3s cluster.
