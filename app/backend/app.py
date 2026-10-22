@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from prometheus_flask_exporter import PrometheusMetrics
-from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from datetime import datetime, timezone
 import os
 
@@ -32,6 +32,10 @@ notes_deleted_counter = Counter(
 notes_updated_counter = Counter(
     'notes_updated_total',
     'Total number of notes updated'
+)
+notes_active_gauge = Gauge(
+    'cloudnotes_notes_total',
+    'Current number of notes in database'
 )
 
 class Note(db.Model):
@@ -74,6 +78,10 @@ def ensure_database_ready():
 
 @app.route('/metrics')
 def metrics_endpoint():
+    try:
+        notes_active_gauge.set(Note.query.count())
+    except Exception:
+        pass
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 @app.route('/api/health')

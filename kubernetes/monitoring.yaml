@@ -146,7 +146,7 @@ data:
       "title": "CloudNotes Production Dashboard",
       "tags": ["cloudnotes", "production"],
       "refresh": "5s",
-      "version": 3,
+      "version": 4,
       "time": {
         "to": "now",
         "from": "now-1h"
@@ -155,9 +155,11 @@ data:
       "schemaVersion": 36,
       "panels": [
         {
+          "id": 1,
           "title": "Backend Status",
           "type": "stat",
           "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -167,41 +169,165 @@ data:
                   { "color": "red", "value": null },
                   { "color": "green", "value": 1 }
                 ]
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": { "text": "DOWN", "color": "red" },
+                    "1": { "text": "HEALTHY", "color": "green" }
+                  }
+                }
+              ]
+            }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "up{job=\"cloudnotes-backend\"}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Active Notes in DB",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "blue", "value": null }]
               }
             }
           },
           "targets": [
-            { "expr": "up{job=\"cloudnotes-backend\"}", "refId": "A" }
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "max(cloudnotes_notes_total) or vector(0)",
+              "refId": "A"
+            }
           ]
         },
         {
+          "id": 3,
           "title": "Total Notes Created",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              }
+            }
+          },
           "targets": [
-            { "expr": "sum(notes_created_total)", "refId": "A" }
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(notes_created_total) or vector(0)",
+              "refId": "A"
+            }
           ]
         },
         {
-          "title": "Total Notes Deleted",
-          "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
-          "targets": [
-            { "expr": "sum(notes_deleted_total)", "refId": "A" }
-          ]
-        },
-        {
+          "id": 4,
           "title": "Total Notes Updated",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+          "gridPos": { "h": 4, "w": 5, "x": 14, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "yellow", "value": null }]
+              }
+            }
+          },
           "targets": [
-            { "expr": "sum(notes_updated_total)", "refId": "A" }
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(notes_updated_total) or vector(0)",
+              "refId": "A"
+            }
           ]
         },
         {
+          "id": 5,
+          "title": "Total Notes Deleted",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "orange", "value": null }]
+              }
+            }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(notes_deleted_total) or vector(0)",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "HTTP Request Rate (5m)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 10, "x": 0, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "rate(flask_http_request_total[5m])",
+              "legendFormat": "{{method}} {{status}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "P95 Latency",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 10, "x": 10, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P95 Latency",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 8,
           "title": "Error Rate (%)",
           "type": "gauge",
-          "gridPos": { "h": 8, "w": 4, "x": 20, "y": 0 },
+          "gridPos": { "h": 8, "w": 4, "x": 20, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
               "min": 0,
@@ -219,50 +345,18 @@ data:
           },
           "targets": [
             {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "(sum(rate(flask_http_request_total{status=~\"5..\"}[5m])) or vector(0)) / (sum(rate(flask_http_request_total[5m])) or vector(1)) * 100",
               "refId": "A"
             }
           ]
         },
         {
-          "title": "HTTP Request Rate (5m)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 10, "x": 0, "y": 4 },
-          "fieldConfig": {
-            "defaults": {
-              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
-            }
-          },
-          "targets": [
-            {
-              "expr": "rate(flask_http_request_total[5m])",
-              "legendFormat": "{{method}} {{status}}",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "title": "P95 Latency",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 10, "x": 10, "y": 4 },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }
-            }
-          },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P95 Latency",
-              "refId": "A"
-            }
-          ]
-        },
-        {
+          "id": 9,
           "title": "Backend Memory Usage",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 20, "x": 0, "y": 12 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
               "unit": "bytes",
@@ -271,6 +365,7 @@ data:
           },
           "targets": [
             {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "process_resident_memory_bytes{job=\"cloudnotes-backend\"}",
               "legendFormat": "Memory (bytes)",
               "refId": "A"
@@ -314,6 +409,8 @@ spec:
               value: "Admin"
             - name: GF_AUTH_DISABLE_LOGIN_FORM
               value: "true"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: "/var/lib/grafana/dashboards/cloudnotes.json"
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
